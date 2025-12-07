@@ -24,13 +24,18 @@ new Tesseract({
 ##### recognize
 
 ```ts
-recognize(buffer: Buffer, {
+recognize(buffer: Buffer, RecognizeOptions)
+```
+
+###### Recognize Options
+
+```ts
+
   progressChanged?: ({ progress: number, ocrAlive: number, bbox: { top: number, right: number, bottom: number, left: number } }) => Promise<{
     getText() => string,
     getHOCR() => string,
     getTSV() => string,
   }>
-})
 ```
 
 ---
