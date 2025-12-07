@@ -1,36 +1,98 @@
-## Functions
+# Tesseract Nodejs Addon
 
-[x] **recognize(buffer, options?)**
-  Gleich wie oben, aber direkt aus einem Buffer.
-[x] **recognizeBatch(jobs, options?)**
-  Führt mehrere OCR-Jobs in einem Lauf aus, liefert Ergebnisse pro Job.
-[x] **detectOrientationAndScript(pathOrBuffer)**
-  Erkennt Drehwinkel und dominante Schrift/Sprache.
-[x] **getText(pathOrBuffer, options?)**
-  Gibt nur den reinen UTF-8-Text zurück.
-[x] **getHOCR(pathOrBuffer, options?)**
-  Gibt hOCR-HTML‐Struktur (Text + BBox + Confidences) zurück.
-[x] **getTSV(pathOrBuffer, options?)**
-  Liefert TSV-Format mit Zeilen-/Wort-Infos.
-[x] **getBoxData(pathOrBuffer, options?)**
-  Extrahiert Bounding-Boxes aller Tokens.
-[x] **getLayout(buffer, options?)**
-  Erkennt Blöcke, Zeilen, Wörter inkl. BBox + Struktur.
-[x] **getWords(pathOrBuffer, options?)**
-  Gibt nur erkannte Wörter inkl. Box + Confidence zurück.
-[x] **getLines(pathOrBuffer, options?)**
-  Gibt erkannte Textzeilen inkl. Box + Confidence zurück.
-[x] **getBlocks(pathOrBuffer, options?)**
-  Gibt größere Textblöcke (Abschnitte) zurück.
-[x] **getConfidences(pathOrBuffer, options?)**
-  Liefert Array aller Wort-Confidence-Werte.
-[x] **processToPDF(pages, options?)**
-  Rendert Bilder/Seiten zu einem OCR-PDF.
-[x] **processToHOCR(pages, options?)**
-  Erzeugt hOCR-Datei aus mehreren Seiten.
-[x] **processToALTO(pages, options?)**
-  Erzeugt ALTO-XML für Dokumente.
-[x] **setVariable(name, value)**
-  Setzt interne Tesseract-Variablen (Whitelist, PSM-Overrides etc.).
-[x] **clearCache()**
-  Leert Tesseract-Caches (z.B. LSTM-Cache) für definierte Re-Runs.
+C++ Addon für Node.js, das Tesseract OCR (über `libtesseract-dev`) in JavaScript/TypeScript bereitstellt.
+
+Status: **WIP**
+Lizenz: **GPL**
+
+---
+
+## Public API
+
+### Klasse: `Tesseract`
+
+#### Konstruktor
+
+```ts
+new Tesseract({
+  dataPath: string,
+  lang: string,
+  skipOcr: boolean
+})
+```
+
+##### recognize
+
+```ts
+recognize(buffer: Buffer, {
+  progressChanged?: ({ progress: number, ocrAlive: number, bbox: { top: number, right: number, bottom: number, left: number } }) => Promise<{
+    getText() => string,
+    getHOCR() => string,
+    getTSV() => string,
+  }>
+})
+```
+
+---
+
+## Vorraussetzungen
+
+- Nodejs
+- node-gyp + c(++) build-toolchain (bspw. build-essentials)
+- libtesseract-dev (5.x.x)
+- Tesseract-Trainingsdaten (eng bzw. deu)
+
+---
+
+## Installation
+
+```bash
+git clone git@github.com:luii/node-tesseract-ocr.git
+cd node-tesseract-ocr
+npm install
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+---
+
+## Starten
+
+```bash
+npm run dev
+```
+
+---
+
+## Beispiel
+
+```ts
+import { readFileSync } from "fs";
+const { Tesseract } = require("../build/Release/<addon_name>.node");
+
+async function main() {
+  const img = readFileSync("test.png");
+
+  const t = new Tesseract({
+    dataPath: "/usr/share/tesseract-ocr/4.00/tessdata",
+    lang: "eng",
+    skipOcr: false
+  });
+
+  const result = await t.recognize(img, {
+    progressChanged: (p) => {
+      console.log("progress:", p);
+    }
+  });
+
+  console.log("TEXT:", result.getText());
+  console.log("HOCR:", result.getHOCR());
+  console.log("TSV:", result.getTSV());
+}
+
+main();
+```
