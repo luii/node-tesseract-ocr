@@ -54,13 +54,23 @@ recognize(buffer: Buffer, RecognizeOptions) => Promise<{
 ## Vorraussetzungen
 
 - Nodejs
-- node-gyp + c(++) build-toolchain (bspw. build-essentials)
-- libtesseract-dev (5.x.x)
+- python3 (für `node-gyp`)
+- node-addon-api
+- c++ build-toolchain (bspw. build-essentials)
+- libtesseract-dev
+- libleptonica-dev
 - Tesseract-Trainingsdaten (eng bzw. deu)
+
+> Siehe [Installation](#installation)
 
 ---
 
 ## Installation
+
+```bash
+sudo apt update
+sudo apt install -y nodejs npm build-essential python3 pkg-config libtesseract-dev libleptonica-dev tesseract-ocr-eng
+```
 
 ```bash
 git clone git@github.com:luii/node-tesseract-ocr.git
