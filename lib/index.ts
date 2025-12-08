@@ -1,22 +1,19 @@
-import { readFileSync } from "node:fs";
-const { Tesseract } = require('../build/Debug/tesseract_ocr_addon.node');
+/*
+* node-tesseract-ocr
+* Copyright (C) 2025  Philipp Czarnetzki
+* 
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU Affero General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+* 
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU Affero General Public License for more details.
+* 
+* You should have received a copy of the GNU Affero General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
-// const buf = readFileSync("./eng_bw.png");
-const buf = readFileSync("./example5.png");
-
-const t = new Tesseract({
-  dataPath: "/usr/share/tesseract-ocr/5/tessdata",
-  lang: 'deu',
-  skipOcr: false,
-});
-
-const abortController = new AbortController();
-
-t.recognize(buf, {
-  abortSignal: abortController.signal,
-  progressChanged: (info: any) => {
-    console.count('called');
-    console.log(info);
-  }
-}).then((res: any) => res.getText()).then(console.log);
-
+module.exports = require("bindings")("node-tesseract-ocr.node");
