@@ -16,4 +16,7 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-module.exports = require("bindings")("node-tesseract-ocr.node");
+import bindings from 'bindings';
+const { Tesseract } = bindings('node-tesseract-ocr.node');
+export { Tesseract };
+export default Tesseract;

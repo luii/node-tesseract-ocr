@@ -346,4 +346,6 @@ declare module 'node-tesseract-ocr' {
      */
     recognize: (imageBuffer: Buffer<ArrayBuffer>, options?: RecognizeOptions) => Promise<RecognizeResult>;
   }
+
+  export default Tesseract;
 }
