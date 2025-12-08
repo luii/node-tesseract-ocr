@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "tesseract_ocr_addon",
+      "target_name": "node-tesseract-ocr",
       "sources": [
         "src/addon.cpp",
         "src/ocr_result.cpp",

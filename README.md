@@ -1,6 +1,6 @@
-# Tesseract Nodejs Addon
+# node-tesseract-ocr
 
-C++ Addon für Node.js, das Tesseract OCR (über `libtesseract-dev`) in JavaScript/TypeScript bereitstellt.
+C++ Addon for Node.js, that uses Tesseract OCR (`libtesseract-dev`) in JavaScript/TypeScript.
 
 Status: **WIP**
 
@@ -10,13 +10,12 @@ Lizenz: **AGPL-3.0**
 
 ## Public API
 
-### Klasse: `Tesseract`
+### Class: `Tesseract`
 
-#### Konstruktor
+#### Constructor
 
 ```ts
 new Tesseract({
-  dataPath: string,
   lang: string,
   skipOcr: boolean
 })
@@ -26,9 +25,10 @@ new Tesseract({
 
 ```ts
 recognize(buffer: Buffer, RecognizeOptions) => Promise<{
-  getText() => string,
-  getHOCR() => string,
-  getTSV() => string,
+  getText() => string;
+  getHOCR() => string;
+  getTSV() => string;
+  getALTO() => string;
 }>
 
 ```
@@ -38,13 +38,12 @@ recognize(buffer: Buffer, RecognizeOptions) => Promise<{
 ```ts
 {
   progressChanged?: ({ 
-    progress: number, 
-    ocrAlive: number, 
-    bbox: { 
-    top: number, 
-    right: number, 
-    bottom: number, 
-    left: number 
+    progress: number; 
+    ocrAlive: number;
+    top: number; 
+    right: number; 
+    bottom: number; 
+    left: number;
   }) => void,
    
 }
@@ -54,19 +53,19 @@ recognize(buffer: Buffer, RecognizeOptions) => Promise<{
 
 ## Vorraussetzungen
 
-- Nodejs
-- python3 (für `node-gyp`)
+- nodejs
+- python3 (for `node-gyp`)
 - node-addon-api
-- c++ build-toolchain (bspw. build-essentials)
+- c++ build-toolchain (e.g. build-essentials)
 - libtesseract-dev
 - libleptonica-dev
-- Tesseract-Trainingsdaten (eng bzw. deu)
+- Tesseract Training-data (eng, deu, ...)
 
-> Siehe [Installation](#installation)
+> See [Install](#install)
 
 ---
 
-## Installation
+## Install
 
 ```bash
 sudo apt update
@@ -85,43 +84,19 @@ npm install
 npm run build
 ```
 
----
+## Start
 
-## Starten
+Either set the `NODE_TESSERACT_DATAPATH` beforehand or do it in one go, it needs to point to where the training data is located.
+On a standard install this is usually `/usr/share/tesseract-ocr/5/tessdata`
 
 ```bash
-npm run dev
+NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata npm run dev
 ```
 
----
+## Examples
 
-## Beispiel
-
-```ts
-import { readFileSync } from "fs";
-const { Tesseract } = require("../build/Release/<addon_name>.node");
-
-async function main() {
-  const img = readFileSync("test.png");
-
-  const t = new Tesseract({
-    dataPath: "/usr/share/tesseract-ocr/4.00/tessdata",
-    lang: "eng",
-    skipOcr: false
-  });
-
-  const result = await t.recognize(img, {
-    progressChanged: (p) => {
-      console.log("progress:", p);
-    }
-  });
-
-  console.log("TEXT:", result.getText());
-  console.log("HOCR:", result.getHOCR());
-  console.log("TSV:", result.getTSV());
-}
-
-main();
+```bash
+NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdatanpm run examples:recognize
 ```
 
 ## Special Thanks
