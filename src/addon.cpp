@@ -20,7 +20,7 @@
 #include <napi.h>
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
-  return Handle::Init(env, exports);
+  return Handle::GetClass(env, exports);
 }
 
 NODE_API_MODULE(hello, InitAll)

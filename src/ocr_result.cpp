@@ -1,3 +1,21 @@
+/*
+ * node-tesseract-ocr
+ * Copyright (C) 2025  Philipp Czarnetzki
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "ocr_result.h"
 #include "napi.h"
 #include <mutex>
@@ -10,22 +28,37 @@ Napi::Function OCRResult::GetClass(Napi::Env env) {
                          InstanceMethod("getText", &OCRResult::GetText),
                          InstanceMethod("getHOCR", &OCRResult::GetHOCR),
                          InstanceMethod("getTSV", &OCRResult::GetTSV),
+                         InstanceMethod("getALTO", &OCRResult::GetALTO),
                      });
 }
 
 OCRResult::OCRResult(const Napi::CallbackInfo &info)
     : Napi::ObjectWrap<OCRResult>(info), handle_(nullptr) {
-  if (info.Length() > 0 && info[0].IsExternal()) {
-    handle_ = info[0].As<Napi::External<Handle>>().Data();
+  // Expect constructor args: text, hocr, tsv (all strings)
+  if (info.Length() >= 1 && info[0].IsString()) {
+    text_ = info[0].As<Napi::String>().Utf8Value();
+  }
+  if (info.Length() >= 2 && info[1].IsString()) {
+    hocr_ = info[1].As<Napi::String>().Utf8Value();
+  }
+  if (info.Length() >= 3 && info[2].IsString()) {
+    tsv_ = info[2].As<Napi::String>().Utf8Value();
+  }
+  if (info.Length() >= 4 && info[3].IsString()) {
+    alto_ = info[3].As<Napi::String>().Utf8Value();
   }
 }
 
-Napi::Object OCRResult::NewInstance(Napi::Env env, Handle *handle) {
+Napi::Object OCRResult::NewInstance(Napi::Env env, const std::string &text,
+                                    const std::string &hocr,
+                                    const std::string &tsv,
+                                    const std::string &alto) {
   Napi::EscapableHandleScope scope(env);
 
   Napi::Function ctor = OCRResult::GetClass(env);
-  Napi::External<Handle> ext = Napi::External<Handle>::New(env, handle);
-  Napi::Object obj = ctor.New({ext});
+  Napi::Object obj =
+      ctor.New({Napi::String::New(env, text), Napi::String::New(env, hocr),
+                Napi::String::New(env, tsv), Napi::String::New(env, alto)});
 
   return scope.Escape(obj).As<Napi::Object>();
 }
@@ -49,69 +82,20 @@ void OCRResult::Cancel(const Napi::CallbackInfo &info) {
 
 Napi::Value OCRResult::GetText(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  std::string text;
-
-  {
-    std::lock_guard<std::mutex> lock(handle_->Mutex());
-    tesseract::TessBaseAPI *api = handle_->Api();
-
-    // if (!handle_->Recognized()) {
-    //   throw Napi::Error::New(env, "No recognition result available");
-    // }
-
-    char *t = api->GetUTF8Text();
-    if (!t) {
-      Napi::Error::New(env, "GetUTF8Text failed").ThrowAsJavaScriptException();
-    }
-    text.assign(t);
-    delete[] t;
-  }
-
-  return Napi::String::New(env, text);
+  return Napi::String::New(env, text_);
 }
 
 Napi::Value OCRResult::GetHOCR(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  std::string hocr;
-
-  {
-    std::lock_guard<std::mutex> lock(handle_->Mutex());
-    tesseract::TessBaseAPI *api = handle_->Api();
-
-    // if (!handle_->Recognized()) {
-    //   throw Napi::Error::New(env, "No recognition result available");
-    // }
-
-    char *t = api->GetHOCRText(0);
-    if (!t) {
-      Napi::Error::New(env, "GetHOCRText failed").ThrowAsJavaScriptException();
-    }
-    hocr.assign(t);
-    delete[] t;
-  }
-
-  return Napi::String::New(env, hocr);
+  return Napi::String::New(env, hocr_);
 }
 
 Napi::Value OCRResult::GetTSV(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  std::string tsv;
+  return Napi::String::New(env, tsv_);
+}
 
-  {
-    std::lock_guard<std::mutex> lock(handle_->Mutex());
-    tesseract::TessBaseAPI *api = handle_->Api();
-
-    // if (!handle_->Recognized()) {
-    //   throw Napi::Error::New(env, "No recognition result available");
-    // }
-
-    char *t = api->GetTSVText(0);
-    if (!t) {
-      Napi::Error::New(env, "GetTSVText failed").ThrowAsJavaScriptException();
-    }
-    tsv.assign(t);
-    delete[] t;
-  }
-
-  return Napi::String::New(env, tsv);
+Napi::Value OCRResult::GetALTO(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  return Napi::String::New(env, alto_);
 }

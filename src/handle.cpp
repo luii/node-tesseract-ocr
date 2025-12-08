@@ -1,19 +1,30 @@
+/*
+ * node-tesseract-ocr
+ * Copyright (C) 2025  Philipp Czarnetzki
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "handle.h"
 #include "napi.h"
 #include "ocr_worker.h"
 #include <tesseract/pageiterator.h>
 #include <tesseract/publictypes.h>
 
-Napi::Object Handle::Init(Napi::Env env, Napi::Object exports) {
-
-  Napi::Function funcs =
-      DefineClass(env, "Tesseract",
-                  {InstanceMethod<&Handle::SetPageMode>(
-                       "setPageMode", static_cast<napi_property_attributes>(
-                                          napi_writable | napi_configurable)),
-                   InstanceMethod<&Handle::Recognize>(
-                       "recognize", static_cast<napi_property_attributes>(
-                                        napi_writable | napi_configurable))});
+Napi::Object Handle::GetClass(Napi::Env env, Napi::Object exports) {
+  Napi::Function funcs = DefineClass(
+      env, "Tesseract", {InstanceMethod("recognize", &Handle::Recognize)});
 
   Napi::FunctionReference *constructor = new Napi::FunctionReference();
 
@@ -71,70 +82,28 @@ Handle::Handle(const Napi::CallbackInfo &info)
       return;
     }
   }
+}
 
-  api_ = std::make_unique<tesseract::TessBaseAPI>();
+Handle::~Handle() {}
+
+std::unique_ptr<tesseract::TessBaseAPI> Handle::CreateApi() {
+  auto api = std::make_unique<tesseract::TessBaseAPI>();
   if (skipOcr_) {
-    api_->InitForAnalysePage();
+    api->InitForAnalysePage();
   } else {
-    if (api_->Init(dataPath_.c_str(), lang_.c_str(), oemMode_)) {
-      api_->End();
-
-      Napi::Error::New(env, "Could not initialize Tesseract API")
-          .ThrowAsJavaScriptException();
-      return;
+    if (api->Init(dataPath_.c_str(), lang_.c_str(), oemMode_) == -1) {
+      api->End();
+      return nullptr;
     }
   }
 
-  api_->SetPageSegMode(static_cast<tesseract::PageSegMode>(psm_));
-}
-
-Handle::~Handle() {
-  if (api_) {
-    api_->End();
-  }
-}
-
-void Handle::SetPageMode(const Napi::CallbackInfo &info) {
-  const Napi::Env env = info.Env();
-
-  if (!api_) {
-    Napi::Error::New(env,
-                     "Cannot set page mode when api is not available anymore")
-        .ThrowAsJavaScriptException();
-    return;
-  }
-
-  if (info.Length() <= 0 || !info[0].IsNumber()) {
-    Napi::TypeError::New(env, "Expected argument at index 0 to be a number")
-        .ThrowAsJavaScriptException();
-    return;
-  }
-
-  tesseract::PageSegMode psm = static_cast<tesseract::PageSegMode>(
-      info[0].As<Napi::Number>().Int32Value());
-
-  if (psm < 0 || psm >= tesseract::PSM_COUNT) {
-    Napi::TypeError::New(info.Env(), "Unsupported Page Segmentation Mode")
-        .ThrowAsJavaScriptException();
-    return;
-  }
-
-  api_->SetPageSegMode(psm);
-
-  return;
+  api->SetPageSegMode(static_cast<tesseract::PageSegMode>(psm_));
+  return api;
 }
 
 Napi::Value Handle::Recognize(const Napi::CallbackInfo &info) {
   const Napi::Env env = info.Env();
   const Napi::Promise::Deferred deffered = Napi::Promise::Deferred::New(env);
-
-  if (!api_) {
-    deffered.Reject(
-        Napi::Error::New(
-            env, "Cannot recognize image with no available tesseract api")
-            .Value());
-    return deffered.Promise();
-  }
 
   if (skipOcr_) {
     deffered.Reject(Napi::Error::New(env, "OCR not available when handle was "
@@ -161,11 +130,9 @@ Napi::Value Handle::Recognize(const Napi::CallbackInfo &info) {
     }
   }
 
-  // check here for the abort signal
-
   auto imageBuffer = info[0].As<Napi::Buffer<uint8_t>>();
-  auto *pWorker =
-      new OCRWorker(env, this, imageBuffer, deffered, progressCallback);
+  auto *pWorker = new OCRWorker(this, info.This().As<Napi::Object>(),
+                                imageBuffer, deffered, progressCallback);
 
   pWorker->Queue();
 
@@ -201,7 +168,5 @@ Napi::Value Handle::Recognize(const Napi::CallbackInfo &info) {
 //   tesseract::PageIterator *iterator =
 //   api_->AnalyseLayout(merge_similar_words); return;
 // }
-
-tesseract::TessBaseAPI *Handle::Api() { return api_.get(); }
 
 std::mutex &Handle::Mutex() { return mutex_; }
