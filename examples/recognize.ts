@@ -27,10 +27,9 @@ async function main() {
     lang: ['eng']
   });
 
-  t
-    .recognize(buf, {
-      progressChanged: (info) => console.log(info)
-    })
+  t.recognize(buf, {
+    progressChanged: (info) => console.log(info)
+  })
     .then((result) => result.getText())
     .then(console.log);
 }
