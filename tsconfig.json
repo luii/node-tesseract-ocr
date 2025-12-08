@@ -22,10 +22,11 @@
     "types": [
       "node"
     ],
-    "rootDir": "lib"
+    "baseUrl": "./",
+    "rootDir": "./lib"
   },
   "include": [
-    "lib/**/*.ts"
+    "lib/**/*.ts",
   ],
   "exclude": [
     "node_modules",

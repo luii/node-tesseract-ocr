@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "lib/index.d.ts",
   "scripts": {
     "build:addon": "node-gyp rebuild --debug",
     "build:ts": "tsc -p tsconfig.json",
@@ -12,9 +12,20 @@
   },
   "gypfile": true,
   "devDependencies": {
+    "@types/bindings": "^1.5.5",
     "@types/node": "^22.0.0",
     "node-addon-api": "^8.5.0",
     "node-gyp": "^10.0.0",
     "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "bindings": "^1.5.0"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
   }
 }

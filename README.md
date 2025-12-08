@@ -3,6 +3,7 @@
 C++ Addon für Node.js, das Tesseract OCR (über `libtesseract-dev`) in JavaScript/TypeScript bereitstellt.
 
 Status: **WIP**
+
 Lizenz: **AGPL-3.0**
 
 ---
@@ -122,3 +123,7 @@ async function main() {
 
 main();
 ```
+
+## Special Thanks
+
+- Stunt3000
