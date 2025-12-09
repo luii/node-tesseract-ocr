@@ -1,6 +1,6 @@
 {
   "name": "@luii/node-tesseract-ocr",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "private": false,
   "gypfile": true,
   "main": "dist/cjs/index.cjs",
@@ -52,9 +52,11 @@
   "files": [
     "dist/**",
     "prebuilds/**",
+    "src/**",
     "build/Release/*.node",
     "package.json",
-    "README.md"
+    "README.md",
+    "binding.gyp"
   ],
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -70,7 +72,7 @@
     ".": {
       "import": "./dist/esm/index.mjs",
       "require": "./dist/cjs/index.cjs",
-      "types": "./lib/index.d.ts"
+      "types": "./dist/index.d.ts"
     }
   }
 }

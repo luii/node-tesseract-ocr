@@ -72,10 +72,10 @@ jobs:
           mkdir -p prebuilds
           find prebuilds-merged -type f -name "*.node" -exec bash -c '
             for f; do
-              rel="${f#prebuilds-merged/}"
-              rel="${rel#*/prebuilds/}"
-              mkdir -p "prebuilds/$(dirname "$rel")"
-              cp "$f" "prebuilds/$rel"
+              platform_dir="$(basename "$(dirname "$f")")"
+              filename="$(basename "$f")"
+              mkdir -p "prebuilds/$platform_dir"
+              cp "$f" "prebuilds/$platform_dir/$filename
             done
           ' bash {} +
 
