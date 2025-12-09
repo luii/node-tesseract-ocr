@@ -6,7 +6,7 @@ on:
       - "v*"
 
 jobs:
-  build:
+  prebuilds:
     strategy:
       fail-fast: false
       matrix:

@@ -1,5 +1,5 @@
 publish:
-  needs: build
+  needs: prebuilds
   runs-on: ubuntu-latest
 
   steps:
@@ -9,6 +9,9 @@ publish:
       with:
         node-version: 22
         registry-url: "https://registry.npmjs.org"
+
+    - name: Install deps
+      run: npm ci
 
     - name: Download prebuild artifacts
       uses: actions/download-artifact@v4
@@ -21,12 +24,14 @@ publish:
         find prebuilds-merged -type f -name "*.node" -exec bash -c '
           for f; do
             rel="${f#prebuilds-merged/}"
-            # rel sieht typischerweise so aus: <artifact-name>/prebuilds/<platform-arch>/node.napi.node
             rel="${rel#*/prebuilds/}"
             mkdir -p "prebuilds/$(dirname "$rel")"
             cp "$f" "prebuilds/$rel"
           done
         ' bash {} +
+
+    - name: Build TypeScript
+      run: npm run build:ts
 
     - name: Verify package contents
       run: npm pack --dry-run
