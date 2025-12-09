@@ -83,6 +83,27 @@ jobs:
       - name: Build TypeScript
         run: npm run build:ts
 
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Upload merged prebuilds
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: prebuilds/
+          asset_name: prebuilds-${{ github.ref_name }}.zip
+          asset_content_type: application/zip
+
       - name: Check package contents
         run: npm pack
 
