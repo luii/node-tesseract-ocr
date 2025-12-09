@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
         node-version: [20, 22]
     runs-on: ${{ matrix.os }}
 
@@ -21,6 +21,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+
+      - name: Install system deps (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential python3 pkg-config \
+            libtesseract-dev libleptonica-dev
+
+      - name: Install system deps (macOS only)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install tesseract leptonica
 
       - name: Install deps
         run: npm ci
