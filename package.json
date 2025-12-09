@@ -1,7 +1,7 @@
 {
   "name": "node-tesseract-ocr",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
   "gypfile": true,
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.mjs",
