@@ -1,0 +1,13 @@
+*.md
+*.png
+**/node_modules/
+**/dist
+**/examples
+.git
+npm-debug.log
+.coverage
+.coverage.*
+.env
+.header.nvim
+.clangd
+
