@@ -30,7 +30,20 @@
       ],
       "defines": [
         "NODE_ADDON_API_DISABLE_DEPRECATED",
-      ]
+      ],
+      "conditions": [
+        [
+          "OS=='linux' or OS=='mac'",
+          {
+            "include_dirs": [
+              "<!(node -p \"require('node-addon-api').include\")",
+              "<!@(pkg-config --cflags-only-I tesseract lept | sed -e 's/-I//g')"
+            ],
+            "libraries": [
+              "<!@(pkg-config --libs tesseract lept)"
+            ]
+          }
+        ]
     }
   ]
 }
