@@ -6,13 +6,47 @@ Status: **WIP**
 
 Lizenz: **AGPL-3.0**
 
----
-
 ## Public API
 
 ### Class: `Tesseract`
 
-#### Constructor
+#### TesseractOptions
+
+```ts
+ {
+    /**
+     * Its generally safer to use as few languages as possible.
+     * The more languages Tesseract needs to load the longer 
+     * it takes to recognize a image.
+     * @public
+     */
+    lang: Array<keyof typeof AvailableLanguages>;
+
+    /**
+     * Skip Ocr for when you only want to (for example) analyze the layout
+     * @property {boolean} [skipOcr]
+     */
+    skipOcr?: boolean;
+
+    /**
+     * OCR Engine Modes
+     * The engine mode cannot be changed after creating the instance
+     * If another mode is needed, its advised to create a new instance.
+     * @throws {Error} Will throw an error when oem mode is below 0 or over 3
+     */
+    oemMode?: OcrEngineMode;
+
+    /**
+     * Page Segmentation Modes
+     * The page segmentation mode cannot be changed after creating the instance
+     * If another mode is needed, its advised to create a new instance.
+     * @throws {Error} Will throw a error when psm mode is below 0 or over 13
+     */
+    psm?: PageSegmentationMode;
+  }
+```
+
+#### constructor(options: TesseractOptions)
 
 ```ts
 new Tesseract({
@@ -49,9 +83,7 @@ recognize(buffer: Buffer, RecognizeOptions) => Promise<{
 }
 ```
 
----
-
-## Vorraussetzungen
+## Prerequisities
 
 - nodejs
 - python3 (for `node-gyp`)
@@ -62,8 +94,6 @@ recognize(buffer: Buffer, RecognizeOptions) => Promise<{
 - Tesseract Training-data (eng, deu, ...)
 
 > See [Install](#install)
-
----
 
 ## Install
 
@@ -96,9 +126,9 @@ NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata npm run dev
 ## Examples
 
 ```bash
-NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdatanpm run examples:recognize
+NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata npm run examples:recognize
 ```
 
 ## Special Thanks
 
-- Stunt3000
+- **Stunt3000**

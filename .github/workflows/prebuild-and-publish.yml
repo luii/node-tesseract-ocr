@@ -84,7 +84,7 @@ jobs:
         run: npm run build:ts
 
       - name: Check package contents
-        run: npm pack --dry-run
+        run: npm pack
 
       - name: Publish to npm
         run: npm publish --access public
