@@ -75,7 +75,7 @@ jobs:
               platform_dir="$(basename "$(dirname "$f")")"
               filename="$(basename "$f")"
               mkdir -p "prebuilds/$platform_dir"
-              cp "$f" "prebuilds/$platform_dir/$filename
+              cp "$f" "prebuilds/$platform_dir/$filename"
             done
           ' bash {} +
 
