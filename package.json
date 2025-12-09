@@ -2,27 +2,39 @@
   "name": "node-tesseract-ocr",
   "version": "0.1.0",
   "private": true,
+  "gypfile": true,
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.mjs",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build:addon": "node-gyp rebuild --debug",
+    "install": "node-gyp-build",
+    "prebuild": "prebuildify --napi --strip",
+    "build": "npm run build:release",
+    "build:addon:debug": "node-gyp rebuild --debug",
+    "build:addon:release": "node-gyp rebuild --release",
     "build:cjs": "tsc -p tsconfig.cjs.json && mv dist/cjs/index.js dist/cjs/index.cjs",
     "build:esm": "tsc -p tsconfig.esm.json && mv dist/esm/index.js dist/esm/index.mjs",
-    "build": "rm -rf dist && mkdir dist && npm run build:addon && npm run build:cjs && npm run build:esm",
+    "build:debug": "rm -rf dist && mkdir dist && npm run build:addon:debug && npm run build:cjs && npm run build:esm",
+    "build:release": "rm -rf dist && mkdir dist && npm run build:addon:release && npm run build:cjs && npm run build:esm",
     "build:examples": "npm run build && npx tsc -p tsconfig.examples.json",
     "example:recognize": "npm run build:examples && node dist/examples/recognize.js"
   },
-  "gypfile": true,
+  "files": [
+    "dist/cjs/index.cjs",
+    "dist/esm/index.mjs",
+    "dist/index.d.ts",
+    "prebuilds/**",
+    "build/Release/*.node"
+  ],
   "devDependencies": {
-    "@types/bindings": "^1.5.5",
     "@types/node": "^22.0.0",
     "node-addon-api": "^8.5.0",
+    "prebuildify": "^5.0.0",
     "node-gyp": "^10.0.0",
     "typescript": "^5.6.0"
   },
   "dependencies": {
-    "bindings": "^1.5.0"
+    "node-gyp-build": "^4.0.0"
   },
   "exports": {
     ".": {
