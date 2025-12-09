@@ -4,7 +4,7 @@ C++ Addon for Node.js, that uses Tesseract OCR (`libtesseract-dev`) in JavaScrip
 
 Status: **WIP**
 
-Lizenz: **AGPL-3.0**
+Lizenz: **Apache-2.0**
 
 ## Public API
 
