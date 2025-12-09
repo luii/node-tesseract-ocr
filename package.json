@@ -1,6 +1,6 @@
 {
   "name": "@luii/node-tesseract-ocr",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "private": false,
   "gypfile": true,
   "main": "dist/cjs/index.cjs",
@@ -41,7 +41,8 @@
     "build": "npm run build:release",
     "build:addon:debug": "node-gyp rebuild --debug",
     "build:addon:release": "node-gyp rebuild --release",
-    "build:ts": "npm run build:cjs && npm run build:esm",
+    "build:types": "mkdir -p dist && cp lib/index.d.ts dist/index.d.ts",
+    "build:ts": "npm run build:cjs && npm run build:esm && npm run build:types",
     "build:cjs": "tsc -p tsconfig.cjs.json && mv dist/cjs/index.js dist/cjs/index.cjs",
     "build:esm": "tsc -p tsconfig.esm.json && mv dist/esm/index.js dist/esm/index.mjs",
     "build:debug": "rm -rf dist && mkdir dist && npm run build:addon:debug && npm run build:cjs && npm run build:esm",
@@ -55,8 +56,9 @@
     "src/**",
     "build/Release/*.node",
     "package.json",
+    "binding.gyp",
     "README.md",
-    "binding.gyp"
+    "LICENSE.md"
   ],
   "devDependencies": {
     "@types/node": "^22.0.0",
