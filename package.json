@@ -1,11 +1,14 @@
 {
-  "name": "node-tesseract-ocr",
+  "name": "@luii/node-tesseract-ocr",
   "version": "1.0.0",
   "private": false,
   "gypfile": true,
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.mjs",
   "types": "dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "install": "node-gyp-build",
     "prebuild": "prebuildify --napi --strip",
