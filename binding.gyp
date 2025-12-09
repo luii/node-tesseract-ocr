@@ -50,8 +50,7 @@
             "libraries": [
               "-L/opt/homebrew/lib",
               "-L/usr/local/lib",
-              "-ltesseract",
-              "-llept"
+              "-ltesseract"
             ]
           }
         ],
