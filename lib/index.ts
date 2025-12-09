@@ -16,7 +16,6 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-import bindings from 'bindings';
-const { Tesseract } = bindings('node-tesseract-ocr.node');
+const { Tesseract } = require('node-gyp-build')(__dirname);
 export { Tesseract };
 export default Tesseract;
