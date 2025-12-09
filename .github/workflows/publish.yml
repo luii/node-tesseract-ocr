@@ -1,0 +1,37 @@
+publish:
+  needs: build
+  runs-on: ubuntu-latest
+
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        registry-url: "https://registry.npmjs.org"
+
+    - name: Download prebuild artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: prebuilds-merged
+
+    - name: Merge prebuilds folders
+      run: |
+        mkdir -p prebuilds
+        find prebuilds-merged -type f -name "*.node" -exec bash -c '
+          for f; do
+            rel="${f#prebuilds-merged/}"
+            # rel sieht typischerweise so aus: <artifact-name>/prebuilds/<platform-arch>/node.napi.node
+            rel="${rel#*/prebuilds/}"
+            mkdir -p "prebuilds/$(dirname "$rel")"
+            cp "$f" "prebuilds/$rel"
+          done
+        ' bash {} +
+
+    - name: Verify package contents
+      run: npm pack --dry-run
+
+    - name: Publish to npm
+      run: npm publish --dry-run
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
