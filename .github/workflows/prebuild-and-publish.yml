@@ -1,0 +1,78 @@
+name: Build prebuilt binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  prebuilds:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [20, 22]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build prebuilds
+        run: npm run prebuild
+
+      - name: Upload prebuilds
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: prebuilds/
+          if-no-files-found: error
+  publish:
+    needs: prebuilds
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download prebuild artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: prebuilds-merged
+
+      - name: Merge prebuilds folders
+        run: |
+          mkdir -p prebuilds
+          find prebuilds-merged -type f -name "*.node" -exec bash -c '
+            for f; do
+              rel="${f#prebuilds-merged/}"
+              rel="${rel#*/prebuilds/}"
+              mkdir -p "prebuilds/$(dirname "$rel")"
+              cp "$f" "prebuilds/$rel"
+            done
+          ' bash {} +
+
+      - name: Build TypeScript
+        run: npm run build:ts
+
+      - name: Check package contents
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
