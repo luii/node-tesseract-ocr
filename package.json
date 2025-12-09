@@ -12,6 +12,7 @@
     "build": "npm run build:release",
     "build:addon:debug": "node-gyp rebuild --debug",
     "build:addon:release": "node-gyp rebuild --release",
+    "build:ts": "npm run build:cjs && npm run build:esm",
     "build:cjs": "tsc -p tsconfig.cjs.json && mv dist/cjs/index.js dist/cjs/index.cjs",
     "build:esm": "tsc -p tsconfig.esm.json && mv dist/esm/index.js dist/esm/index.mjs",
     "build:debug": "rm -rf dist && mkdir dist && npm run build:addon:debug && npm run build:cjs && npm run build:esm",
@@ -20,11 +21,11 @@
     "example:recognize": "npm run build:examples && node dist/examples/recognize.js"
   },
   "files": [
-    "dist/cjs/index.cjs",
-    "dist/esm/index.mjs",
-    "dist/index.d.ts",
+    "dist/**",
     "prebuilds/**",
-    "build/Release/*.node"
+    "build/Release/*.node",
+    "package.json",
+    "README.md"
   ],
   "devDependencies": {
     "@types/node": "^22.0.0",
