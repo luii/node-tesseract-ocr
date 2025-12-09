@@ -1,6 +1,6 @@
 {
   "name": "node-tesseract-ocr",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "gypfile": true,
   "main": "dist/cjs/index.cjs",
