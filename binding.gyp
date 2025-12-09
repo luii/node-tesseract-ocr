@@ -9,8 +9,7 @@
         "src/handle.cpp"
       ],
       "include_dirs": [
-        "<!(node -p \"require('node-addon-api').include\")",
-        "/usr/include"
+        "<!(node -p \"require('node-addon-api').include\")"
       ],
       "dependencies": [
         "<!(node -p \"require('node-addon-api').targets\"):node_addon_api",
@@ -24,16 +23,12 @@
         "-Werror",
         "-fexceptions"
       ],
-      "libraries": [
-        "-ltesseract",
-        "-llept"
-      ],
       "defines": [
         "NODE_ADDON_API_DISABLE_DEPRECATED",
       ],
       "conditions": [
         [
-          "OS=='linux' or OS=='mac'",
+          "OS=='linux'",
           {
             "include_dirs": [
               "<!(node -p \"require('node-addon-api').include\")",
@@ -43,7 +38,23 @@
               "<!@(pkg-config --libs tesseract lept)"
             ]
           }
-        ]
+        ],
+        [
+          "OS=='mac'",
+          {
+            "include_dirs": [
+              "<!(node -p \"require('node-addon-api').include\")",
+              "/opt/homebrew/include",
+              "/usr/local/include"
+            ],
+            "libraries": [
+              "-L/opt/homebrew/lib",
+              "-L/usr/local/lib",
+              "-ltesseract",
+              "-llept"
+            ]
+          }
+        ],
       ]
     }
   ]
