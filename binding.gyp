@@ -6,7 +6,9 @@
         "src/addon.cpp",
         "src/ocr_result.cpp",
         "src/ocr_worker.cpp",
-        "src/handle.cpp"
+        "src/handle.cpp",
+
+        "src/tesseract_wrapper.cpp",
       ],
       "include_dirs": [
         "<!(node -p \"require('node-addon-api').include\")"
