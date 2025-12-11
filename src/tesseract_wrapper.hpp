@@ -20,8 +20,12 @@ private:
 
   // JS Methods
   Napi::Value InitEngine(const Napi::CallbackInfo &info);
+  Napi::Value InitForAnalysePage(const Napi::CallbackInfo &info);
+  Napi::Value AnalysePage(const Napi::CallbackInfo &info);
   Napi::Value SetVariable(const Napi::CallbackInfo &info);
   Napi::Value SetImage(const Napi::CallbackInfo &info);
+  Napi::Value SetPageMode(const Napi::CallbackInfo &info);
+  Napi::Value SetRectangle(const Napi::CallbackInfo &info);
   Napi::Value Recognize(const Napi::CallbackInfo &info);
   Napi::Value GetUTF8Text(const Napi::CallbackInfo &info);
   Napi::Value GetHOCR(const Napi::CallbackInfo &info);
