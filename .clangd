@@ -1,8 +1,0 @@
-CompileFlags:
-  Add: [
-    -I/home/philipp/tesseract-ocr/node_modules/node-addon-api,
-    -I/home/philipp/.cache/node-gyp/22.21.1/include/node,
-    -ltesseract,
-    -llept,
-    -std=c++23
-  ]
