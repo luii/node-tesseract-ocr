@@ -3,4 +3,6 @@ dist/
 node_modules/
 prebuilds/
 .clangd
+compile_commands.json
+.cache/
 example*.png
