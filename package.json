@@ -2,7 +2,11 @@
   "name": "@luii/node-tesseract-ocr",
   "version": "1.0.19",
   "private": false,
-  "gypfile": true,
+  "binary": {
+    "napi_versions": [
+      10
+    ]
+  },
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.mjs",
   "types": "dist/index.d.ts",
@@ -29,26 +33,19 @@
     "ocr",
     "tesseract",
     "leptonica",
-    "node-gyp",
+    "cmake-js",
     "node-addon-api"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "install": "node-gyp-build",
-    "prebuild": "prebuildify --napi --strip",
-    "build": "npm run build:release",
-    "build:addon:debug": "node-gyp rebuild --debug",
-    "build:addon:release": "node-gyp rebuild --release",
-    "build:types": "mkdir -p dist && cp lib/index.d.ts dist/index.d.ts",
-    "build:ts": "npm run build:cjs && npm run build:esm && npm run build:types",
-    "build:cjs": "tsc -p tsconfig.cjs.json && mv dist/cjs/index.js dist/cjs/index.cjs",
-    "build:esm": "tsc -p tsconfig.esm.json && mv dist/esm/index.js dist/esm/index.mjs",
-    "build:debug": "rm -rf dist && mkdir dist && npm run build:addon:debug && npm run build:cjs && npm run build:esm",
-    "build:release": "rm -rf dist && mkdir dist && npm run build:addon:release && npm run build:cjs && npm run build:esm",
-    "build:examples": "npm run build && npx tsc -p tsconfig.examples.json",
-    "example:recognize": "npm run build:examples && node dist/examples/recognize.js"
+    "install": "cmake-js compile",
+    "prebuild": "prebuild --napi --strip --backend=cmake-js --all",
+    "build:debug": "cmake-js compile --debug && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && cp lib/index.d.ts dist/index.d.ts && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
+    "build:release": "cmake-js compile --release && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && cp lib/index.d.ts dist/index.d.ts && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
+    "example:recognize": "npm run build:debug && tsc -p tsconfig.examples.json && node -r dotenv/config dist/examples/recognize.js dotenv_config_path=.env.local",
+    "test:cpp": "cmake-js compile --release && ./build/Release/node-tesseract-ocr-tests"
   },
   "files": [
     "dist/**",
@@ -56,19 +53,20 @@
     "src/**",
     "build/Release/*.node",
     "package.json",
-    "binding.gyp",
+    "CMakeLists.txt",
     "README.md",
     "LICENSE.md"
   ],
   "devDependencies": {
     "@types/node": "^22.0.0",
     "node-addon-api": "^8.5.0",
-    "prebuildify": "^5.0.0",
-    "node-gyp": "^10.0.0",
+    "prebuild": "^5.0.0",
     "typescript": "^5.6.0"
   },
   "dependencies": {
-    "node-gyp-build": "^4.0.0"
+    "cmake-js": "^7.4.0",
+    "dotenv": "^16.4.5",
+    "pkg-prebuilds": "^1.0.0"
   },
   "exports": {
     ".": {
