@@ -22,8 +22,10 @@
 #include <memory>
 #include <napi.h>
 #include <queue>
+#include <stop_token>
 #include <tesseract/baseapi.h>
 #include <thread>
+#include <variant>
 
 class WorkerThread {
 public:
@@ -31,16 +33,17 @@ public:
   ~WorkerThread();
 
   template <typename C> Napi::Promise Enqueue(C &&command);
-  void Terminate();
 
 private:
-  void Run();
+  void Run(std::stop_token token);
+  void MakeCallback(std::shared_ptr<Job> *job);
 
 private:
   Napi::Env _env;
   Napi::ThreadSafeFunction _main_thread;
 
-  std::atomic<bool> _stop{false};
+  // for graceful shutdown of the worker
+  std::atomic<bool> _closing{false};
   std::mutex _queue_mutex;
   std::condition_variable _queue_cv;
   std::queue<std::shared_ptr<Job>> _request_queue;
@@ -49,3 +52,28 @@ private:
 
   std::jthread _worker_thread;
 };
+
+template <typename C> Napi::Promise WorkerThread::Enqueue(C &&command) {
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(_env);
+  auto job = std::make_shared<Job>(Job{Command{std::forward<C>(command)},
+                                       deferred, std::nullopt, std::nullopt});
+
+  {
+    std::scoped_lock<std::mutex> lock(_queue_mutex);
+    std::stop_token token = _worker_thread.get_stop_token();
+
+    if (_closing.load() || token.stop_requested()) {
+      deferred.Reject(Napi::Error::New(_env, "Worker is closing").Value());
+      return deferred.Promise();
+    }
+
+    _request_queue.push(job);
+
+    if (std::holds_alternative<CommandEnd>(job->command)) {
+      _closing.store(true);
+    }
+  };
+
+  _queue_cv.notify_one();
+  return deferred.Promise();
+}

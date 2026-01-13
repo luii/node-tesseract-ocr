@@ -19,8 +19,9 @@
 #include <exception>
 #include <memory>
 #include <mutex>
+#include <queue>
+#include <stop_token>
 #include <thread>
-#include <utility>
 #include <variant>
 
 WorkerThread::WorkerThread(Napi::Env env)
@@ -28,50 +29,69 @@ WorkerThread::WorkerThread(Napi::Env env)
       _main_thread(Napi::ThreadSafeFunction::New(
           env, Napi::Function::New(env, [](const Napi::CallbackInfo &) {}),
           "main_thread_callback", 0, 1)) {
-  _worker_thread = std::jthread([this] { this->Run(); });
+  _worker_thread =
+      std::jthread([this](std::stop_token token) { this->Run(token); });
 }
 
 WorkerThread::~WorkerThread() {
-  Terminate();
   _worker_thread.request_stop();
-  _main_thread.Release();
-}
-
-void WorkerThread::Terminate() {
-  {
-    std::scoped_lock<std::mutex> lock(_queue_mutex);
-    _stop.store(true);
-  }
   _queue_cv.notify_all();
-};
-
-template <typename C> Napi::Promise WorkerThread::Enqueue(C &&command) {
-  Napi::Promise::Deferred deffered = Napi::Promise::Deferred::New(_env);
-  auto job =
-      std::make_shared<Job>(Job{Command{std::forward<C>(command)}, deffered});
-
-  {
-    std::scoped_lock<std::mutex> lock(_queue_mutex);
-    _request_queue.push(job);
-  };
-
-  _queue_cv.notify_one();
-  return deffered.Promise();
+  if (_worker_thread.joinable()) {
+    _worker_thread.join();
+  }
 }
 
-void WorkerThread::Run() {
-  std::shared_ptr<Job> job;
+void WorkerThread::MakeCallback(std::shared_ptr<Job> *p_job) {
+  _main_thread.BlockingCall(p_job, [](Napi::Env env,
+                                      Napi::Function /* unused */,
+                                      std::shared_ptr<Job> *_job) {
+    // break the reference to the underlying job reference
+    std::shared_ptr<Job> job = *_job;
+    delete _job;
+
+    if (job->error.has_value()) {
+      job->deffered.Reject(Napi::Error::New(env, *job->error).Value());
+      return;
+    }
+
+    if (!job->result.has_value()) {
+      job->deffered.Resolve(env.Undefined());
+      return;
+    }
+
+    job->deffered.Resolve(MatchResult(env, *job->result));
+  });
+}
+
+void WorkerThread::Run(std::stop_token token) {
+  std::shared_ptr<Job> job = nullptr;
 
   do {
+    job = nullptr;
     {
       std::unique_lock<std::mutex> lock(_queue_mutex);
-      _queue_cv.wait(lock, [&] { return !_request_queue.empty() || _stop; });
+
+      // wait until queue is not empty anymore, or stop was requested
+      _queue_cv.wait(lock, [&] {
+        return !_request_queue.empty() || token.stop_requested();
+      });
+      if (token.stop_requested()) {
+        while (!_request_queue.empty()) {
+          std::shared_ptr<Job> job = _request_queue.front();
+          _request_queue.pop();
+
+          job->error = "Worker stopped accepting new Commands";
+          auto *sp_pending_job = new std::shared_ptr<Job>(job);
+          MakeCallback(sp_pending_job);
+        }
+        break;
+      }
+
+      if (_request_queue.empty())
+        break;
+
       job = _request_queue.front();
       _request_queue.pop();
-
-      if (_stop && _request_queue.empty()) {
-        return;
-      }
     };
 
     try {
@@ -83,23 +103,8 @@ void WorkerThread::Run() {
     }
 
     auto *sp_job = new std::shared_ptr<Job>(job);
-    _main_thread.BlockingCall(sp_job, [](Napi::Env env,
-                                         Napi::Function /* unused */,
-                                         std::shared_ptr<Job> *p_job) {
-      std::shared_ptr<Job> j = *p_job;
-      delete p_job;
-
-      if (j->error.has_value()) {
-        j->deffered.Reject(Napi::Error::New(env, *j->error).Value());
-        return;
-      }
-
-      if (!j->result.has_value()) {
-        j->deffered.Resolve(env.Undefined());
-        return;
-      }
-
-      j->deffered.Resolve(MatchResult(env, *j->result));
-    });
-  } while (!std::holds_alternative<CommandEnd>(job->command));
+    MakeCallback(sp_job);
+  } while (!token.stop_requested() && job != nullptr &&
+           !std::holds_alternative<CommandEnd>(job->command));
+  _main_thread.Release();
 };
