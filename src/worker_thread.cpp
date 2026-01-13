@@ -23,6 +23,7 @@
 #include <stop_token>
 #include <thread>
 #include <variant>
+#include <vector>
 
 WorkerThread::WorkerThread(Napi::Env env)
     : _env(env),
@@ -35,6 +36,7 @@ WorkerThread::WorkerThread(Napi::Env env)
 
 WorkerThread::~WorkerThread() {
   _worker_thread.request_stop();
+  _api.End();
   _queue_cv.notify_all();
   if (_worker_thread.joinable()) {
     _worker_thread.join();
@@ -64,31 +66,43 @@ void WorkerThread::MakeCallback(std::shared_ptr<Job> *p_job) {
 }
 
 void WorkerThread::Run(std::stop_token token) {
-  std::shared_ptr<Job> job = nullptr;
 
-  do {
-    job = nullptr;
+  auto drain_queue = [&](std::vector<std::shared_ptr<Job>> &pending_jobs) {
+    while (!_request_queue.empty()) {
+      pending_jobs.push_back(_request_queue.front());
+      _request_queue.pop();
+    }
+  };
+  auto reject_jobs =
+      [&](const char *message,
+          const std::vector<std::shared_ptr<Job>> &pending_jobs) {
+        for (const auto &pending_job : pending_jobs) {
+          pending_job->error = message;
+          auto *sp_pending_job = new std::shared_ptr<Job>(pending_job);
+          MakeCallback(sp_pending_job);
+        }
+      };
+
+  while (true) {
+    std::shared_ptr<Job> job;
     {
       std::unique_lock<std::mutex> lock(_queue_mutex);
+      std::vector<std::shared_ptr<Job>> pending_jobs;
 
       // wait until queue is not empty anymore, or stop was requested
       _queue_cv.wait(lock, [&] {
         return !_request_queue.empty() || token.stop_requested();
       });
       if (token.stop_requested()) {
-        while (!_request_queue.empty()) {
-          std::shared_ptr<Job> job = _request_queue.front();
-          _request_queue.pop();
-
-          job->error = "Worker stopped accepting new Commands";
-          auto *sp_pending_job = new std::shared_ptr<Job>(job);
-          MakeCallback(sp_pending_job);
-        }
+        drain_queue(pending_jobs);
+        lock.unlock();
+        reject_jobs("Worker stopped accepting new Commands", pending_jobs);
         break;
       }
 
-      if (_request_queue.empty())
-        break;
+      // if (_request_queue.empty()) {
+      //   break;
+      // }
 
       job = _request_queue.front();
       _request_queue.pop();
@@ -104,7 +118,18 @@ void WorkerThread::Run(std::stop_token token) {
 
     auto *sp_job = new std::shared_ptr<Job>(job);
     MakeCallback(sp_job);
-  } while (!token.stop_requested() && job != nullptr &&
-           !std::holds_alternative<CommandEnd>(job->command));
+
+    if (token.stop_requested() ||
+        std::holds_alternative<CommandEnd>(job->command)) {
+      std::vector<std::shared_ptr<Job>> pending_jobs;
+      {
+        std::unique_lock<std::mutex> lock(_queue_mutex);
+        drain_queue(pending_jobs);
+      }
+      reject_jobs("Worker stopped accepting new Commands", pending_jobs);
+      break;
+    }
+  };
+
   _main_thread.Release();
 };
