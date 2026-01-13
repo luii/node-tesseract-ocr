@@ -17,12 +17,11 @@
 #pragma once
 
 #include "worker_thread.hpp"
-#include <atomic>
 #include <napi.h>
 #include <tesseract/baseapi.h>
 #include <tesseract/publictypes.h>
 
-class TesseractWrapper : Napi::ObjectWrap<TesseractWrapper> {
+class TesseractWrapper : public Napi::ObjectWrap<TesseractWrapper> {
 
 public:
   static Napi::Object InitAddon(Napi::Env env, Napi::Object exports);
@@ -54,10 +53,10 @@ private:
   Napi::Value DetectOrientationScript(const Napi::CallbackInfo &info);
   Napi::Value MeanTextConf(const Napi::CallbackInfo &info);
   Napi::Value GetUTF8Text(const Napi::CallbackInfo &info);
-  Napi::Value GetHOCR(const Napi::CallbackInfo &info);
-  Napi::Value GetTSV(const Napi::CallbackInfo &info);
-  Napi::Value GetUNLV(const Napi::CallbackInfo &info);
-  Napi::Value GetALTO(const Napi::CallbackInfo &info);
+  Napi::Value GetHOCRText(const Napi::CallbackInfo &info);
+  Napi::Value GetTSVText(const Napi::CallbackInfo &info);
+  Napi::Value GetUNLVText(const Napi::CallbackInfo &info);
+  Napi::Value GetALTOText(const Napi::CallbackInfo &info);
   Napi::Value GetInitLanguages(const Napi::CallbackInfo &info);
   Napi::Value GetLoadedLanguages(const Napi::CallbackInfo &info);
   Napi::Value GetAvailableLanguages(const Napi::CallbackInfo &info);
@@ -65,14 +64,7 @@ private:
   Napi::Value End(const Napi::CallbackInfo &info);
 
   Napi::Env _env;
-  std::atomic_bool _busy{false};
-  std::atomic_bool _initialized{false};
-
   WorkerThread _worker_thread;
 
-  tesseract::OcrEngineMode _oem;
-  const std::string _dataPath = std::getenv("NODE_TESSERACT_DATAPATH");
-  std::string _lang;
-
-  Pix *_pix = nullptr;
+  const std::string _data_path = std::getenv("NODE_TESSERACT_DATAPATH");
 };
