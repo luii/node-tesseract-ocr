@@ -148,6 +148,10 @@ export const AvailableLanguages = {
 export type AvailableLanguage =
   (typeof AvailableLanguages)[keyof typeof AvailableLanguages];
 
+export type Language =
+  | AvailableLanguage
+  | `${AvailableLanguage}+${AvailableLanguage}`;
+
 /**
  * When Tesseract/Cube is initialized we can choose to instantiate/load/run
  * only the Tesseract part, only the Cube part or both along with the combiner.
@@ -242,7 +246,7 @@ export interface TesseractInitOptions {
    * The more languages Tesseract needs to load the longer it takes to recognize a image.
    * @public
    */
-  lang?: AvailableLanguage;
+  lang?: Language;
 
   /**
    * OCR Engine Modes
@@ -362,9 +366,9 @@ export interface TesseractInstance {
     progressCallback?: (info: ProgressChangedInfo) => void,
     pageNumber?: number,
   ) => Promise<string>;
-  getInitLanguages: () => Promise<any>;
-  getLoadedLanguages: () => Promise<any>;
-  getAvailableLanguages: () => Promise<any>;
+  getInitLanguages: () => Promise<Language>;
+  getLoadedLanguages: () => Promise<AvailableLanguage[]>;
+  getAvailableLanguages: () => Promise<AvailableLanguage[]>;
   clear: () => Promise<void>;
   end: () => Promise<void>;
 }
