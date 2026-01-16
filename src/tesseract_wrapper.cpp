@@ -43,7 +43,7 @@ Napi::Object TesseractWrapper::InitAddon(Napi::Env env, Napi::Object exports) {
           InstanceMethod("setImage", &TesseractWrapper::SetImage),
           InstanceMethod("setPageMode", &TesseractWrapper::SetPageMode),
           InstanceMethod("setRectangle", &TesseractWrapper::SetRectangle),
-          InstanceMethod("SetSourceResolution",
+          InstanceMethod("setSourceResolution",
                          &TesseractWrapper::SetSourceResolution),
           InstanceMethod("recognize", &TesseractWrapper::Recognize),
           InstanceMethod("detectOrientationScript",
@@ -141,9 +141,10 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   const Napi::Value v = options.Get("configs");
   if (!v.IsUndefined()) {
     if (!v.IsArray()) {
-      Napi::TypeError::New(env, "Option 'configs' must be an array of strings")
-          .ThrowAsJavaScriptException();
-      return env.Undefined();
+      deferred.Reject(Napi::TypeError::New(
+                          env, "Option 'configs' must be an array of strings")
+                          .Value());
+      return deferred.Promise();
     }
 
     Napi::Array arr = v.As<Napi::Array>();
@@ -155,9 +156,10 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
     for (uint32_t i = 0; i < len; ++i) {
       Napi::Value item = arr.Get(i);
       if (!item.IsString()) {
-        Napi::TypeError::New(env, "Option 'configs' must contain only strings")
-            .ThrowAsJavaScriptException();
-        return env.Undefined();
+        deferred.Reject(Napi::TypeError::New(
+                            env, "Option 'configs' must contain only strings")
+                            .Value());
+        return deferred.Promise();
       }
       command.configs_storage.emplace_back(item.As<Napi::String>().Utf8Value());
     }
@@ -175,28 +177,32 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   const bool has_vars_values = !vars_values.IsUndefined();
 
   if (has_vars_vec != has_vars_values) {
-    Napi::TypeError::New(
-        env, "Options 'varsVec' and 'varsValues' must be provided together")
-        .ThrowAsJavaScriptException();
-    return env.Undefined();
+    deferred.Reject(
+        Napi::TypeError::New(
+            env, "Options 'varsVec' and 'varsValues' must be provided together")
+            .Value());
+    return deferred.Promise();
   }
 
   if (has_vars_vec) {
     if (!vars_vec.IsArray() || !vars_values.IsArray()) {
-      Napi::TypeError::New(
-          env, "Options 'varsVec' and 'varsValues' must be arrays of strings")
-          .ThrowAsJavaScriptException();
-      return env.Undefined();
+      deferred.Reject(
+          Napi::Error::New(
+              env,
+              "Options 'varsVec' and 'varsValues' must be arrays of strings")
+              .Value());
+      return deferred.Promise();
     }
 
     Napi::Array a = vars_vec.As<Napi::Array>();
     Napi::Array b = vars_values.As<Napi::Array>();
 
     if (a.Length() != b.Length()) {
-      Napi::TypeError::New(
-          env, "'varsVec' and 'varsValues' must have the same length")
-          .ThrowAsJavaScriptException();
-      return env.Undefined();
+      deferred.Reject(
+          Napi::TypeError::New(
+              env, "'varsVec' and 'varsValues' must have the same length")
+              .Value());
+      return deferred.Promise();
     }
 
     const uint32_t len = a.Length();
@@ -207,10 +213,11 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
       Napi::Value k = a.Get(i);
       Napi::Value val = b.Get(i);
       if (!k.IsString() || !val.IsString()) {
-        Napi::TypeError::New(
-            env, "'varsVec' and 'varsValues' must contain only strings")
-            .ThrowAsJavaScriptException();
-        return env.Undefined();
+        deferred.Reject(
+            Napi::TypeError::New(
+                env, "'varsVec' and 'varsValues' must contain only strings")
+                .Value());
+        return deferred.Promise();
       }
       command.vars_vec.emplace_back(k.As<Napi::String>().Utf8Value());
       command.vars_values.emplace_back(val.As<Napi::String>().Utf8Value());
