@@ -14,11 +14,6 @@
  * permissions and limitations under the License.
  */
 
-const { Tesseract } = require("pkg-prebuilds")(
-  __dirname,
-  require("./binding-options"),
-);
-
 /**
  * All available languages for tesseract
  * @readonly
@@ -237,6 +232,165 @@ export const PageSegmentationModes = {
 
 export type PageSegmentationMode =
   (typeof PageSegmentationModes)[keyof typeof PageSegmentationModes];
+
+/**
+ * Tesseract init options
+ */
+export interface TesseractInitOptions {
+  /**
+   * Its generally safer to use as few languages as possible.
+   * The more languages Tesseract needs to load the longer it takes to recognize a image.
+   * @public
+   */
+  lang?: AvailableLanguage;
+
+  /**
+   * OCR Engine Modes
+   * The engine mode cannot be changed after creating the instance
+   * If another mode is needed, its advised to create a new instance.
+   * @throws {Error} Will throw an error when oem mode is below 0 or over 3
+   */
+  oem?: OcrEngineMode;
+  setOnlyNonDebugParams?: boolean;
+  configs?: Array<string>;
+
+  /**
+   *
+   */
+  varsVec?: Array<string>;
+  varsValues?: Array<string>;
+}
+
+export interface TesseractSetRectangleOptions {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+export interface ProgressChangedInfo {
+  /**
+   * Chars in this buffer
+   */
+  progress: number;
+
+  /**
+   * Percent complete increasing (0-100)
+   */
+  percent: number;
+
+  /**
+   * States if the worker is still alive
+   */
+  ocrAlive: number;
+
+  /**
+   * top coordinate of the bbox of the current element that tesseract is processing
+   */
+  top: number;
+
+  /**
+   * right coordinate of the bbox of the current element that tesseract is processing
+   */
+  right: number;
+
+  /**
+   * bottom coordinate of the bbox of the current element that tesseract is processing
+   */
+  bottom: number;
+
+  /**
+   * left coordinate of the bbox of the current element that tesseract is processing
+   */
+  left: number;
+}
+
+export interface DetectOrientationScriptResult {
+  /**
+   * Orientation of the source image in degrees
+   * Orientation refers to the way the source is rotated, **not** how the text is
+   * aligned.
+   * @example
+   *   0 = 0°
+   *   1 = 90°
+   *   2 = 180°
+   *   3 = 270°
+   * @type {number}
+   */
+  orientationDegrees: number;
+  /**
+   * The confidence of tesseract for the orientation
+   * @type {number}
+   */
+  orientationConfidence: number;
+  scriptName: string;
+  scriptConfidence: number;
+}
+
+export interface TesseractInstance {
+  init: (options: TesseractInitOptions) => Promise<void>;
+  initForAnalysePage: () => Promise<void>;
+  analysePage: (mergeSimilarWords: boolean) => Promise<void>; // TODO: return pageiterator here
+  setPageMode: (psm: PageSegmentationMode) => Promise<void>;
+  setVariable: (name: string, value: string) => Promise<number>;
+  getIntVariable: (name: string) => Promise<number>;
+  getBoolVariable: (name: string) => Promise<number>;
+  getDoubleVariable: (name: string) => Promise<number>;
+  getStringVariable: (name: string) => Promise<string>;
+  setImage: (buffer: Buffer<ArrayBuffer>) => Promise<void>;
+  setRectangle: (options: TesseractSetRectangleOptions) => Promise<void>;
+  setSourceResolution: (ppi: number) => Promise<void>;
+
+  /**
+   * @throws  {Error} Will throw an error if the parameter at index 0 is not a function
+   * @param   {(info: ProgressChangedInfo) => void} progressCallback Callback will be called to inform the user about progress changes
+   * @returns {Promise<void>}
+   */
+  recognize: (
+    progressCallback: (info: ProgressChangedInfo) => void,
+  ) => Promise<void>;
+  detectOrientationScript: () => Promise<DetectOrientationScriptResult>;
+  meanTextConf: () => Promise<number>;
+  getUTF8Text: () => Promise<string>;
+  getHOCRText: (
+    progressCallback?: (info: ProgressChangedInfo) => void,
+    pageNumber?: number,
+  ) => Promise<string>;
+  getTSVText: () => Promise<string>;
+  getUNLVText: () => Promise<string>;
+  getALTOText: (
+    progressCallback?: (info: ProgressChangedInfo) => void,
+    pageNumber?: number,
+  ) => Promise<string>;
+  getInitLanguages: () => Promise<any>;
+  getLoadedLanguages: () => Promise<any>;
+  getAvailableLanguages: () => Promise<any>;
+  clear: () => Promise<void>;
+  end: () => Promise<void>;
+}
+
+export type Tesseract = TesseractInstance;
+export type TesseractConstructor = new () => TesseractInstance;
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const rootFromSource = path.resolve(__dirname, "../../");
+const bindingOptionsFromSource = path.resolve(
+  rootFromSource,
+  "binding-options.js",
+);
+const bindingOptionsPath = fs.existsSync(bindingOptionsFromSource)
+  ? bindingOptionsFromSource
+  : path.resolve(process.cwd(), "binding-options.js");
+const prebuildRoot = fs.existsSync(bindingOptionsFromSource)
+  ? rootFromSource
+  : process.cwd();
+
+const { Tesseract } = require("pkg-prebuilds")(
+  prebuildRoot,
+  require(bindingOptionsPath),
+) as { Tesseract: TesseractConstructor };
 
 export { Tesseract };
 export default Tesseract;
