@@ -36,7 +36,6 @@ WorkerThread::WorkerThread(Napi::Env env)
 
 WorkerThread::~WorkerThread() {
   _worker_thread.request_stop();
-  _api.End();
   _queue_cv.notify_all();
   if (_worker_thread.joinable()) {
     _worker_thread.join();
@@ -44,25 +43,29 @@ WorkerThread::~WorkerThread() {
 }
 
 void WorkerThread::MakeCallback(std::shared_ptr<Job> *p_job) {
-  _main_thread.BlockingCall(p_job, [](Napi::Env env,
-                                      Napi::Function /* unused */,
-                                      std::shared_ptr<Job> *_job) {
-    // break the reference to the underlying job reference
-    std::shared_ptr<Job> job = *_job;
-    delete _job;
+  auto status = _main_thread.NonBlockingCall(
+      p_job, [](Napi::Env env, Napi::Function /* unused */,
+                std::shared_ptr<Job> *_job) {
+        // break the reference to the underlying job reference
+        std::shared_ptr<Job> job = *_job;
+        delete _job;
 
-    if (job->error.has_value()) {
-      job->deffered.Reject(Napi::Error::New(env, *job->error).Value());
-      return;
-    }
+        if (job->error.has_value()) {
+          job->deffered.Reject(Napi::Error::New(env, *job->error).Value());
+          return;
+        }
 
-    if (!job->result.has_value()) {
-      job->deffered.Resolve(env.Undefined());
-      return;
-    }
+        if (!job->result.has_value()) {
+          job->deffered.Resolve(env.Undefined());
+          return;
+        }
 
-    job->deffered.Resolve(MatchResult(env, *job->result));
-  });
+        job->deffered.Resolve(MatchResult(env, *job->result));
+      });
+
+  if (status != napi_ok) {
+    return;
+  }
 }
 
 void WorkerThread::Run(std::stop_token token) {
@@ -114,6 +117,8 @@ void WorkerThread::Run(std::stop_token token) {
           job->command);
     } catch (const std::exception &error) {
       job->error = error.what();
+    } catch (...) {
+      job->error = "Something unexpected happened";
     }
 
     auto *sp_job = new std::shared_ptr<Job>(job);
@@ -131,5 +136,6 @@ void WorkerThread::Run(std::stop_token token) {
     }
   };
 
+  _api.End();
   _main_thread.Release();
 };
