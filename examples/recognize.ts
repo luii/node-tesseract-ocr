@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import {
   Tesseract,
-  OcrEngineModes
+  OcrEngineModes,
   AvailableLanguages,
   PageSegmentationModes,
 } from "@luii/node-tesseract-ocr";
