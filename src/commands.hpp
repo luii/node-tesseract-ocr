@@ -274,8 +274,11 @@ struct CommandSetImage {
 struct CommandSetPageMode {
   tesseract::PageSegMode psm;
   Result invoke(tesseract::TessBaseAPI &api) const {
-    if (!psm || psm < 0 || psm >= tesseract::PSM_COUNT) {
-      throw std::runtime_error("tesseract::TessBaseAPI::SetPageMode out range");
+    if (psm < 0 || psm >= tesseract::PageSegMode::PSM_COUNT) {
+
+      throw_runtime(
+          "tesseract::TessBaseAPI::SetPageMode out range; received: {}",
+          static_cast<int>(psm));
     }
     api.SetPageSegMode(psm);
     return ResultVoid{};
