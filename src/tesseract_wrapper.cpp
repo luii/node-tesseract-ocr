@@ -17,8 +17,11 @@
 #include "tesseract_wrapper.hpp"
 #include "commands.hpp"
 #include "worker_thread.hpp"
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <leptonica/allheaders.h>
+#include <string>
 #include <tesseract/publictypes.h>
 
 Napi::FunctionReference TesseractWrapper::constructor;
@@ -93,14 +96,25 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
 
   const Napi::Value langOption = options.Get("lang");
   if (!langOption.IsUndefined()) {
-    if (!langOption.IsString()) {
+    if (!langOption.IsArray()) {
       deferred.Reject(
-          Napi::TypeError::New(env, "Option 'lang' must be of type string")
+          Napi::TypeError::New(env, "Option 'lang' must be a array of strings")
               .Value());
       return deferred.Promise();
     }
 
-    command.language = langOption.As<Napi::String>().Utf8Value();
+    Napi::Array languages = langOption.As<Napi::Array>();
+    std::string language;
+
+    for (uint32_t i = 0; i < languages.Length(); ++i) {
+      if (!languages.Get(i).IsString())
+        continue;
+      if (!language.empty())
+        language += "+";
+      language += languages.Get(i).As<Napi::String>().Utf8Value();
+    }
+
+    command.language = language;
   }
 
   const Napi::Value engineModeOption = options.Get("oem");

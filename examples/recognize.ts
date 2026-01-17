@@ -28,7 +28,7 @@ async function main() {
 
   try {
     await tesseract.init({
-      lang: AvailableLanguages.eng,
+      lang: [AvailableLanguages.eng],
       oem: OcrEngineModes.OEM_DEFAULT,
     });
     await tesseract.setPageMode(PageSegmentationModes.PSM_OSD_ONLY);
