@@ -8,13 +8,11 @@
     },
     {
       "path": "./tsconfig.examples.json"
-    },
+    }
   ],
   "compilerOptions": {
     "moduleResolution": "node",
-    "lib": [
-      "esnext"
-    ],
+    "lib": ["esnext"],
     "strict": true,
     "noImplicitAny": true,
     "noUnusedLocals": true,
@@ -25,20 +23,12 @@
     "useDefineForClassFields": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "declaration": false,
-    "types": [
-      "node"
-    ],
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "types": ["node"],
     "baseUrl": "./",
     "rootDir": "./lib"
   },
-  "include": [
-    "lib/**/*.ts",
-    "lib/**/*.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist/**",
-    "build/**"
-  ]
+  "include": ["lib/**/*.ts", "lib/**/*.d.ts"],
+  "exclude": ["node_modules", "dist/**", "build/**"]
 }
