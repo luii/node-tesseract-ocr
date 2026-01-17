@@ -184,57 +184,37 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
     }
   }
 
-  const Napi::Value vars_vec = options.Get("varsVec");
-  const Napi::Value vars_values = options.Get("varsValues");
+  const Napi::Value varsOption = options.Get("vars");
 
-  const bool has_vars_vec = !vars_vec.IsUndefined();
-  const bool has_vars_values = !vars_values.IsUndefined();
-
-  if (has_vars_vec != has_vars_values) {
-    deferred.Reject(
-        Napi::TypeError::New(
-            env, "Options 'varsVec' and 'varsValues' must be provided together")
-            .Value());
-    return deferred.Promise();
-  }
-
-  if (has_vars_vec) {
-    if (!vars_vec.IsArray() || !vars_values.IsArray()) {
+  if (!varsOption.IsUndefined()) {
+    if (!varsOption.IsObject()) {
       deferred.Reject(
-          Napi::Error::New(
-              env,
-              "Options 'varsVec' and 'varsValues' must be arrays of strings")
+          Napi::TypeError::New(env, "Options 'vars' must be of type object")
               .Value());
       return deferred.Promise();
     }
 
-    Napi::Array a = vars_vec.As<Napi::Array>();
-    Napi::Array b = vars_values.As<Napi::Array>();
+    // Napi::Array a = vars_vec.As<Napi::Array>();
+    // Napi::Array b = vars_values.As<Napi::Array>();
+    Napi::Object vars = varsOption.As<Napi::Object>();
+    Napi::Array variable_names = vars.GetPropertyNames();
 
-    if (a.Length() != b.Length()) {
-      deferred.Reject(
-          Napi::TypeError::New(
-              env, "'varsVec' and 'varsValues' must have the same length")
-              .Value());
-      return deferred.Promise();
-    }
+    const uint32_t length = variable_names.Length();
+    command.vars_vec.reserve(length);
+    command.vars_values.reserve(length);
 
-    const uint32_t len = a.Length();
-    command.vars_vec.reserve(len);
-    command.vars_values.reserve(len);
-
-    for (uint32_t i = 0; i < len; ++i) {
-      Napi::Value k = a.Get(i);
-      Napi::Value val = b.Get(i);
-      if (!k.IsString() || !val.IsString()) {
+    for (uint32_t i = 0; i < length; ++i) {
+      Napi::Value variable_value = vars.Get(variable_names.Get(i));
+      if (!variable_names.Get(i).IsString() || !variable_value.IsString()) {
         deferred.Reject(
-            Napi::TypeError::New(
-                env, "'varsVec' and 'varsValues' must contain only strings")
+            Napi::TypeError::New(env, "'vars' must contain only strings")
                 .Value());
         return deferred.Promise();
       }
-      command.vars_vec.emplace_back(k.As<Napi::String>().Utf8Value());
-      command.vars_values.emplace_back(val.As<Napi::String>().Utf8Value());
+      command.vars_vec.emplace_back(
+          variable_names.Get(i).As<Napi::String>().Utf8Value());
+      command.vars_values.emplace_back(
+          variable_value.As<Napi::String>().Utf8Value());
     }
   }
 

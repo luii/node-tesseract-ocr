@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Tesseract, {
-  AvailableLanguages,
+  Language,
   OcrEngineModes,
   PageSegmentationModes,
   TesseractInstance,
@@ -111,13 +111,13 @@ describe("tesseract api validation", () => {
 describe("tesseract api integration", () => {
   it("initializes and ends", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [AvailableLanguages.eng] });
+    await instance.init({ lang: [Language.eng] });
     await instance.end();
   });
 
   it("accepts valid page mode", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [AvailableLanguages.eng] });
+    await instance.init({ lang: [Language.eng] });
     await instance.setPageMode(PageSegmentationModes.PSM_SINGLE_LINE);
     await instance.end();
   });
@@ -126,7 +126,7 @@ describe("tesseract api integration", () => {
     const progressCallbackSpy = vi.fn();
     const instance = new Tesseract();
     await instance.init({
-      lang: [AvailableLanguages.eng],
+      lang: [Language.eng],
     });
     await instance.setImage(exampleImage);
     await instance.recognize(progressCallbackSpy);
@@ -140,7 +140,7 @@ describe("tesseract api integration", () => {
   it("supports HOCR and orientation detection", async () => {
     const progressCallbackSpy = vi.fn();
     const instance = new Tesseract();
-    await instance.init({ lang: [AvailableLanguages.eng] });
+    await instance.init({ lang: [Language.eng] });
     await instance.setImage(exampleImage);
     const hocr = await instance.getHOCRText(progressCallbackSpy);
     expect(hocr).toBeTypeOf("string");
@@ -155,7 +155,7 @@ describe("tesseract api integration", () => {
 
   it("sets and reads variables", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [AvailableLanguages.eng] });
+    await instance.init({ lang: [Language.eng] });
     await instance.setVariable("tessedit_char_whitelist", "abc");
     const value = await instance.getStringVariable("tessedit_char_whitelist");
     expect(value).toBeTypeOf("string");
@@ -165,10 +165,20 @@ describe("tesseract api integration", () => {
 
   it("supports rectangle and source resolution", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [AvailableLanguages.eng] });
+    await instance.init({ lang: [Language.eng] });
     await instance.setImage(exampleImage);
     await instance.setRectangle({ left: 0, top: 0, width: 50, height: 50 });
     await instance.setSourceResolution(300);
+    await instance.end();
+  });
+
+  it("should set `eng` and `osd` as available languages by default", async () => {
+    const instance = new Tesseract();
+    await instance.init({ lang: [] });
+    await expect(instance.getAvailableLanguages()).resolves.toStrictEqual([
+      "eng",
+      "osd",
+    ]);
     await instance.end();
   });
 });
