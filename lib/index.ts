@@ -14,8 +14,6 @@
  * permissions and limitations under the License.
  */
 
-import assert from "node:assert";
-
 /**
  * All available languages for tesseract
  * @readonly
