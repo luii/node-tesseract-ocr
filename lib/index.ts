@@ -14,6 +14,8 @@
  * permissions and limitations under the License.
  */
 
+import assert from "node:assert";
+
 /**
  * All available languages for tesseract
  * @readonly
@@ -974,12 +976,7 @@ export interface DetectOrientationScriptResult {
   /**
    * Orientation of the source image in degrees
    * Orientation refers to the way the source is rotated, **not** how the text is
-   * aligned.
-   * @example
-   *   0 = 0°
-   *   1 = 90°
-   *   2 = 180°
-   *   3 = 270°
+   * aligned. It ranges from 0° to 360° degrees.
    * @type {number}
    */
   orientationDegrees: number;
@@ -988,64 +985,199 @@ export interface DetectOrientationScriptResult {
    * @type {number}
    */
   orientationConfidence: number;
+
+  /**
+   * The name of the script that is used in the source image
+   * @type {string}
+   */
   scriptName: string;
+
+  /**
+   * The confidence of tesseract about the detected script of the source image
+   * @type {number}
+   */
   scriptConfidence: number;
 }
 
 export interface TesseractInstance {
+  /**
+   * Initialize the engine with the given options.
+   * @param   {TesseractInitOptions} options Initialization options (languages, datapath, engine mode, etc.).
+   * @returns {Promise<void>}
+   */
   init(options: TesseractInitOptions): Promise<void>;
-  initForAnalysePage: () => Promise<void>;
-  analysePage: (mergeSimilarWords: boolean) => Promise<void>; // TODO: return pageiterator here
-  setPageMode: (psm: PageSegmentationMode) => Promise<void>;
-  setVariable: <
-    Key extends keyof SetVariableConfigVariables,
-    Value extends SetVariableConfigVariables[Key],
-  >(
-    name: Key,
-    value: Value,
-  ) => Promise<boolean>;
-  getIntVariable: <Key extends keyof SetVariableConfigVariables>(
-    name: Key,
-  ) => Promise<number>;
-  getBoolVariable: <Key extends keyof SetVariableConfigVariables>(
-    name: Key,
-  ) => Promise<number>;
-  getDoubleVariable: <Key extends keyof SetVariableConfigVariables>(
-    name: Key,
-  ) => Promise<number>;
-  getStringVariable: <Key extends keyof SetVariableConfigVariables>(
-    name: Key,
-  ) => Promise<string>;
-  setImage: (buffer: Buffer<ArrayBuffer>) => Promise<void>;
-  setRectangle: (options: TesseractSetRectangleOptions) => Promise<void>;
-  setSourceResolution: (ppi: number) => Promise<void>;
+
+  /**
+   * Initialize the engine for page analysis only.
+   * @returns {Promise<void>}
+   */
+  initForAnalysePage(): Promise<void>;
+
+  /**
+   * Run page layout analysis.
+   * @param   {boolean}       mergeSimilarWords Whether to merge similar words during analysis.
+   * @returns {Promise<void>}
+   */
+  analysePage(mergeSimilarWords: boolean): Promise<void>; // TODO: return pageiterator here
+
+  /**
+   * Set the page segmentation mode (PSM).
+   * @param   {PageSegmentationMode} psm Page segmentation mode.
+   * @returns {Promise<void>}
+   */
+  setPageMode(psm: PageSegmentationMode): Promise<void>;
+
+  /**
+   * Set a configuration variable.
+   * @param {keyof SetVariableConfigVariables} name Variable name.
+   * @param {SetVariableConfigVariables[keyof SetVariableConfigVariables]} value Variable value.
+   * @returns Returns `false` if the lookup failed.
+   */
+  setVariable(
+    name: keyof SetVariableConfigVariables,
+    value: SetVariableConfigVariables[keyof SetVariableConfigVariables],
+  ): Promise<boolean>;
+
+  /**
+   * Get a configuration variable as integer.
+   * @param   {keyof SetVariableConfigVariables} name Variable name.
+   * @returns {Promise<number>} Returns the value of the variable.
+   */
+  getIntVariable(name: keyof SetVariableConfigVariables): Promise<number>;
+
+  /**
+   * Get a configuration variable as boolean (0/1).
+   * @param   {keyof SetVariableConfigVariables} name Variable name.
+   * @returns {Promise<number>} Returns the value of the variable.
+   */
+  getBoolVariable(name: keyof SetVariableConfigVariables): Promise<number>;
+
+  /**
+   * Get a configuration variable as double.
+   * @param   {keyof SetVariableConfigVariables} name Variable name.
+   * @returns {Promise<number>} Returns the value of the variable.
+   */
+  getDoubleVariable(name: keyof SetVariableConfigVariables): Promise<number>;
+
+  /**
+   * Get a configuration variable as string.
+   * @param   {keyof SetVariableConfigVariables} name Variable name.
+   * @returns {Promise<string>} Returns the value of the variable.
+   */
+  getStringVariable(name: keyof SetVariableConfigVariables): Promise<string>;
+
+  /**
+   * Set the image to be recognized.
+   * @param   {Buffer<ArrayBuffer>} buffer Image data buffer.
+   * @returns {Promise<void>}
+   */
+  setImage(buffer: Buffer<ArrayBuffer>): Promise<void>;
+
+  /**
+   * Restrict recognition to a rectangle.
+   * @param   {TesseractSetRectangleOptions} options Rectangle options.
+   * @returns {Promise<void>}
+   */
+  setRectangle(options: TesseractSetRectangleOptions): Promise<void>;
+
+  /**
+   * Set the source resolution in PPI.
+   * @param   {number} ppi Source resolution in PPI.
+   * @returns {Promise<void>}
+   */
+  setSourceResolution(ppi: number): Promise<void>;
 
   /**
    * @throws  {Error} Will throw an error if the parameter at index 0 is not a function
    * @param   {(info: ProgressChangedInfo) => void} progressCallback Callback will be called to inform the user about progress changes
    * @returns {Promise<void>}
    */
-  recognize: (
+  recognize(
     progressCallback: (info: ProgressChangedInfo) => void,
-  ) => Promise<void>;
-  detectOrientationScript: () => Promise<DetectOrientationScriptResult>;
-  meanTextConf: () => Promise<number>;
-  getUTF8Text: () => Promise<string>;
-  getHOCRText: (
+  ): Promise<void>;
+
+  /**
+   * Detect orientation and script (OSD).
+   * @returns {Promise<DetectOrientationScriptResult>}
+   */
+  detectOrientationScript(): Promise<DetectOrientationScriptResult>;
+
+  /**
+   * Get mean text confidence.
+   * @returns {Promise<number>} Returns the mean text confidence on resolve
+   */
+  meanTextConf(): Promise<number>;
+
+  /**
+   * Get recognized text as UTF-8.
+   * @returns {Promise<string>} Returns the recognized test as utf-8 on resolve
+   */
+  getUTF8Text(): Promise<string>;
+
+  /**
+   * Get hOCR output.
+   * @param {Function} progressCallback Optional progress callback.
+   * @param {number} pageNumber Optional page number (0-based).
+   * @returns {Promise<string>} Returns the `hOCR` upon resolve
+   */
+  getHOCRText(
     progressCallback?: (info: ProgressChangedInfo) => void,
     pageNumber?: number,
-  ) => Promise<string>;
-  getTSVText: () => Promise<string>;
-  getUNLVText: () => Promise<string>;
-  getALTOText: (
+  ): Promise<string>;
+
+  /**
+   * Get TSV output.
+   * @returns {Promise<string>} Returns the `tsv` upon resolve
+   */
+  getTSVText(): Promise<string>;
+
+  /**
+   * Get UNLV output.
+   * @returns {Promise<string>} Returns the `unlv` upon resolve
+   */
+  getUNLVText(): Promise<string>;
+
+  /**
+   * Get ALTO XML output.
+   * @param   {Function} progressCallback Optional progress callback.
+   * @param   {number} pageNumber Optional page number (0-based).
+   * @returns {Promise<string>} Returns the `alto` upon resolve
+   */
+  getALTOText(
     progressCallback?: (info: ProgressChangedInfo) => void,
     pageNumber?: number,
-  ) => Promise<string>;
-  getInitLanguages: () => Promise<Language>;
-  getLoadedLanguages: () => Promise<Language[]>;
-  getAvailableLanguages: () => Promise<Language[]>;
-  clear: () => Promise<void>;
-  end: () => Promise<void>;
+  ): Promise<string>;
+
+  /**
+   * Get languages used at initialization.
+   * @returns {Promise<Language>} Returns the languages used when init was called
+   */
+  getInitLanguages(): Promise<Language>;
+
+  /**
+   * Get languages currently loaded.
+   * @returns {Promise<Language[]>} Returns the languages that were actually loaded by `init`
+   */
+  getLoadedLanguages(): Promise<Language[]>;
+
+  /**
+   * Get available languages from tessdata.
+   * NOTE: this only will return anything after `init` was called before with a valid selection of languages
+   * @returns {Promise<Language[]>} Returns the languages that are available to tesseract.
+   */
+  getAvailableLanguages(): Promise<Language[]>;
+
+  /**
+   * Clear internal recognition results/state.
+   * @returns {Promise<void>}
+   */
+  clear(): Promise<void>;
+
+  /**
+   * Release native resources and destroy the instance.
+   * @returns {Promise<void>}
+   */
+  end(): Promise<void>;
 }
 
 export type NativeTesseract = TesseractInstance;
