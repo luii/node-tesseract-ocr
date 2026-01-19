@@ -16,10 +16,11 @@
 
 import { readFileSync } from "node:fs";
 import {
-  Tesseract,
   OcrEngineModes,
-  AvailableLanguages,
+  Language,
   PageSegmentationModes,
+  LogLevels,
+  Tesseract,
 } from "@luii/node-tesseract-ocr";
 
 async function main() {
@@ -28,11 +29,15 @@ async function main() {
 
   try {
     await tesseract.init({
-      lang: [AvailableLanguages.eng],
+      lang: [Language.eng],
       oem: OcrEngineModes.OEM_DEFAULT,
+      vars: {
+        log_level: LogLevels.TRACE,
+      },
     });
     await tesseract.setPageMode(PageSegmentationModes.PSM_OSD_ONLY);
     await tesseract.setImage(buf);
+    await tesseract.setSourceResolution(176);
     await tesseract.getHOCRText((info) => {
       console.log(info);
     });
