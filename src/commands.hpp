@@ -332,9 +332,6 @@ struct CommandDetectOrientationScript {
           "tesseract::TessBaseAPI::DetectOrientationScript failed");
     }
 
-    std::cout << "orient_deg: " << orient_deg << std::endl;
-    std::cout << "orient_deg: " << orient_conf << std::endl;
-
     return ResultObject{{
         {"orientationDegrees", orient_deg},
         {"orientationConfidence", orient_conf},

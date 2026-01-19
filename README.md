@@ -108,7 +108,7 @@ env NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata npm run example:
 
 ### Enums
 
-#### `AvailableLanguages`
+#### `Language`
 
 Mapping of available Tesseract language codes. Most are [_3-letter ISO 639-2/T style_](https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes) (e.g. `eng`, `deu`, `jpn`), with Tesseract-specific variants such as `chi_sim`, `deu_latf`, or `osd`. The value must match the installed traineddata filename (without the `.traineddata` suffix). You can pass a single code via `TesseractInitOptions.lang`.
 
@@ -151,14 +151,13 @@ Full list of page segmentation modes from Tesseract.
 
 #### `TesseractInitOptions`
 
-| Field                   | Type                              | Optional | Default     | Description                                       |
-| ----------------------- | --------------------------------- | -------- | ----------- | ------------------------------------------------- |
-| `lang`                  | [`Language`](#availablelanguages) | Yes      | `undefined` | Language to load (single or `lang1+lang2`).       |
-| `oem`                   | [`OcrEngineMode`](#ocrenginemode) | Yes      | `undefined` | OCR engine mode.                                  |
-| `setOnlyNonDebugParams` | `boolean`                         | Yes      | `undefined` | If true, only non-debug params are set.           |
-| `configs`               | `Array<string>`                   | Yes      | `undefined` | Tesseract config files to apply.                  |
-| `varsVec`               | `Array<string>`                   | Yes      | `undefined` | Variable names to set.                            |
-| `varsValues`            | `Array<string>`                   | Yes      | `undefined` | Variable values to set (same order as `varsVec`). |
+| Field                   | Type                                                                                                  | Optional | Default     | Description                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | -------- | ----------- | --------------------------------------- |
+| `lang`                  | [`Language[]`](#availablelanguages)                                                                   | Yes      | `undefined` | Languages to load as an array.          |
+| `oem`                   | [`OcrEngineMode`](#ocrenginemode)                                                                     | Yes      | `undefined` | OCR engine mode.                        |
+| `vars`                  | `Partial<Record<keyof ConfigurationVariables, ConfigurationVariables[keyof ConfigurationVariables]>>` | Yes      | `undefined` | Variables to set.                       |
+| `configs`               | `Array<string>`                                                                                       | Yes      | `undefined` | Tesseract config files to apply.        |
+| `setOnlyNonDebugParams` | `boolean`                                                                                             | Yes      | `undefined` | If true, only non-debug params are set. |
 
 #### `TesseractSetRectangleOptions`
 
@@ -246,63 +245,63 @@ setPageMode(psm: PageSegmentationMode): Promise<void>
 
 #### setVariable
 
-Sets a Tesseract variable. Returns the Tesseract status code.
+Sets a Tesseract variable. Returns `false` if the lookup failed.
 
-| Name  | Type   | Optional | Default | Description     |
-| ----- | ------ | -------- | ------- | --------------- |
-| name  | string | No       | n/a     | Variable name.  |
-| value | string | No       | n/a     | Variable value. |
+| Name  | Type                                                           | Optional | Default | Description     |
+| ----- | -------------------------------------------------------------- | -------- | ------- | --------------- |
+| name  | keyof SetVariableConfigVariables                               | No       | n/a     | Variable name.  |
+| value | SetVariableConfigVariables\[keyof SetVariableConfigVariables\] | No       | n/a     | Variable value. |
 
 ```ts
-setVariable(name: string, value: string): Promise<number>
+setVariable(name: keyof SetVariableConfigVariables, value: SetVariableConfigVariables[keyof SetVariableConfigVariables]): Promise<boolean>
 ```
 
 #### getIntVariable
 
 Reads an integer variable from Tesseract.
 
-| Name | Type   | Optional | Default | Description    |
-| ---- | ------ | -------- | ------- | -------------- |
-| name | string | No       | n/a     | Variable name. |
+| Name | Type                             | Optional | Default | Description    |
+| ---- | -------------------------------- | -------- | ------- | -------------- |
+| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
 
 ```ts
-getIntVariable(name: string): Promise<number>
+getIntVariable(name: keyof SetVariableConfigVariables): Promise<number>
 ```
 
 #### getBoolVariable
 
 Reads a boolean variable from Tesseract. Returns `0` or `1`.
 
-| Name | Type   | Optional | Default | Description    |
-| ---- | ------ | -------- | ------- | -------------- |
-| name | string | No       | n/a     | Variable name. |
+| Name | Type                             | Optional | Default | Description    |
+| ---- | -------------------------------- | -------- | ------- | -------------- |
+| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
 
 ```ts
-getBoolVariable(name: string): Promise<number>
+getBoolVariable(name: keyof SetVariableConfigVariables): Promise<number>
 ```
 
 #### getDoubleVariable
 
 Reads a double variable from Tesseract.
 
-| Name | Type   | Optional | Default | Description    |
-| ---- | ------ | -------- | ------- | -------------- |
-| name | string | No       | n/a     | Variable name. |
+| Name | Type                             | Optional | Default | Description    |
+| ---- | -------------------------------- | -------- | ------- | -------------- |
+| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
 
 ```ts
-getDoubleVariable(name: string): Promise<number>
+getDoubleVariable(name: keyof SetVariableConfigVariables): Promise<number>
 ```
 
 #### getStringVariable
 
 Reads a string variable from Tesseract.
 
-| Name | Type   | Optional | Default | Description    |
-| ---- | ------ | -------- | ------- | -------------- |
-| name | string | No       | n/a     | Variable name. |
+| Name | Type                             | Optional | Default | Description    |
+| ---- | -------------------------------- | -------- | ------- | -------------- |
+| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
 
 ```ts
-getStringVariable(name: string): Promise<string>
+getStringVariable(name: keyof SetVariableConfigVariables): Promise<string>
 ```
 
 #### setImage
@@ -427,26 +426,26 @@ meanTextConf(): Promise<number>
 
 #### getInitLanguages
 
-Returns [`Language`](#availablelanguages) in raw Tesseract format.
+Returns [`Language`](#availablelanguages) in raw Tesseract format (e.g. "deu+eng").
 
 ```ts
-getInitLanguages(): Promise<Language>
+getInitLanguages(): Promise<string>
 ```
 
 #### getLoadedLanguages
 
-Returns [`AvailableLanguage[]`](#availablelanguages) in raw Tesseract format.
+Returns [`Language[]`](#availablelanguages) in raw Tesseract format.
 
 ```ts
-getLoadedLanguages(): Promise<AvailableLanguage[]>
+getLoadedLanguages(): Promise<Language[]>
 ```
 
 #### getAvailableLanguages
 
-Returns [`AvailableLanguage[]`](#availablelanguages) in raw Tesseract format.
+Returns [`Language[]`](#availablelanguages) in raw Tesseract format.
 
 ```ts
-getAvailableLanguages(): Promise<AvailableLanguage[]>
+getAvailableLanguages(): Promise<Language[]>
 ```
 
 #### clear
@@ -467,6 +466,8 @@ end(): Promise<void>
 
 ## Example
 
+You can find a similar example in the `examples/` folder of the project
+
 ```ts
 import fs from "node:fs";
 import Tesseract, { OcrEngineModes } from "node-tesseract-ocr";
@@ -474,7 +475,7 @@ import Tesseract, { OcrEngineModes } from "node-tesseract-ocr";
 async function main() {
   const tesseract = new Tesseract();
   await tesseract.init({
-    lang: "eng",
+    lang: ["eng"],
     oem: OcrEngineModes.OEM_LSTM_ONLY,
   });
 
