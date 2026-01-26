@@ -44,7 +44,6 @@
   },
   "scripts": {
     "install": "cmake-js compile",
-    "prebuild": "prebuild --napi --strip --backend=cmake-js --all",
     "build:debug": "cmake-js compile --debug && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
     "build:release": "cmake-js compile --release && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
     "example:recognize": "npm run build:debug && tsc -p tsconfig.examples.json && node -r dotenv/config dist/examples/recognize.js dotenv_config_path=.env.local",
@@ -64,13 +63,12 @@
   ],
   "devdependencies": {
     "@types/node": "^22.0.0",
-    "node-addon-api": "^8.5.0",
-    "prebuild": "^5.0.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.9"
   },
   "dependencies": {
     "cmake-js": "^7.4.0",
+    "node-addon-api": "^8.5.0",
     "dotenv": "^16.4.5",
     "pkg-prebuilds": "^1.0.0"
   },
