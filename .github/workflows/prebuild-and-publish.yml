@@ -10,44 +10,63 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        node-version: [20, 22]
+        include:
+          - os: ubuntu-latest
+            arch: x64
+          - os: macos-13
+            arch: x64
+          - os: macos-14
+            arch: arm64
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-
+          node-version: 22
       - name: Install system deps (Linux only)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential python3 pkg-config \
+            build-essential pkg-config \
             libtesseract-dev libleptonica-dev
-
       - name: Install system deps (macOS only)
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install tesseract leptonica
-
+          brew install tesseract leptonica pkg-config
       - name: Install deps
-        run: npm ci
+        run: npm ci --ignore-scripts
+      - name: Build addon
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+        run: npx cmake-js compile --release
+      - name: Copy into prebuilds/ (pkg-prebuilds-copy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_file="$(find build -type f -name "*.node" | head -n 1)"
+          test -n "$node_file"
+          base_dir="$(dirname "$node_file")"
+          file_name="$(basename "$node_file")"
 
-      - name: Build prebuilds
-        run: npm run prebuild
+          npx pkg-prebuilds-copy \
+            --baseDir "$base_dir" \
+            --source "$file_name" \
+            --name "node-tesseract-ocr" \
+            --napi_version 10 \
+            --strip \
+            --arch "${{ matrix.arch }}"
 
       - name: Upload prebuilds
         uses: actions/upload-artifact@v4
         with:
-          name: prebuilds-${{ matrix.os }}-node${{ matrix.node-version }}
+          name: prebuilds-${{ matrix.os }}-${{ matrix.arch }}
           path: prebuilds/
           if-no-files-found: error
+
   publish:
     needs: prebuilds
     runs-on: ubuntu-latest
@@ -56,17 +75,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-
       - name: Download prebuild artifacts
         uses: actions/download-artifact@v4
         with:
           path: prebuilds-merged
-
       - name: Merge prebuilds folders
         run: |
           mkdir -p prebuilds
@@ -87,7 +103,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build TypeScript
-        run: npm run build:ts
+        run: npm run build:release
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2

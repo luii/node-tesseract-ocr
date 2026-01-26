@@ -9,6 +9,9 @@
   },
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.mjs",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "types": "dist/index.d.ts",
   "homepage": "https://github.com/luii/node-tesseract-ocr",
   "repository": {
@@ -24,7 +27,7 @@
       "url": "https://github.com/luii/"
     }
   ],
-  "license": "Apache-2.0",
+  "license": "apache-2.0",
   "author": {
     "url": "https://github.com/luii/",
     "name": "luii"
@@ -36,7 +39,7 @@
     "cmake-js",
     "node-addon-api"
   ],
-  "publishConfig": {
+  "publishconfig": {
     "access": "public"
   },
   "scripts": {
@@ -45,7 +48,7 @@
     "build:debug": "cmake-js compile --debug && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
     "build:release": "cmake-js compile --release && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
     "example:recognize": "npm run build:debug && tsc -p tsconfig.examples.json && node -r dotenv/config dist/examples/recognize.js dotenv_config_path=.env.local",
-    "test:cpp": "cmake-js compile --release && ./build/Release/node-tesseract-ocr-tests",
+    "test:cpp": "cmake-js compile --release && ./build/release/node-tesseract-ocr-tests",
     "test:js": "vitest run",
     "test:js:watch": "vitest"
   },
@@ -53,13 +56,13 @@
     "dist/**",
     "prebuilds/**",
     "src/**",
-    "build/Release/*.node",
+    "build/release/*.node",
     "package.json",
     "CMakeLists.txt",
     "README.md",
     "LICENSE.md"
   ],
-  "devDependencies": {
+  "devdependencies": {
     "@types/node": "^22.0.0",
     "node-addon-api": "^8.5.0",
     "prebuild": "^5.0.0",
