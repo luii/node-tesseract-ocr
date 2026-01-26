@@ -27,6 +27,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${TESS_INCLUDE_DIRS}
   ${LEPT_INCLUDE_DIRS}
 )
+
+if(APPLE)
+  foreach(dir IN LISTS LEPT_INCLUDE_DIRS)
+    target_include_directories(${PROJECT_NAME} PRIVATE "${dir}/..")
+  endforeach()
+endif()
+
 target_link_libraries(${PROJECT_NAME} PRIVATE 
   ${CMAKE_JS_LIB}
   PkgConfig::TESS
