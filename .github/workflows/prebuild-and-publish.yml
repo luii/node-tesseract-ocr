@@ -34,13 +34,29 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install tesseract leptonica pkg-config
+          brew install tesseract leptonica pkg-config llvm
       - name: Install deps
         run: npm ci --ignore-scripts
       - name: Build addon
         env:
           npm_config_arch: ${{ matrix.arch }}
-        run: npx cmake-js compile --release
+          CC: ${{ runner.os == 'macOS' && format('{0}/opt/llvm/bin/clang', env.HOMEBREW_PREFIX) || '' }}
+          CXX: ${{ runner.os == 'macOS' && format('{0}/opt/llvm/bin/clang++', env.HOMEBREW_PREFIX) || '' }}
+        run: |
+          # Resolve brew prefix reliably (covers /opt/homebrew and /usr/local)
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            BREW_PREFIX="$(brew --prefix)"
+            export CC="$BREW_PREFIX/opt/llvm/bin/clang"
+            export CXX="$BREW_PREFIX/opt/llvm/bin/clang++"
+            export CMAKE_C_COMPILER="$CC"
+            export CMAKE_CXX_COMPILER="$CXX"
+
+            # Often helpful for picking Brew libc++/headers consistently
+            export CPPFLAGS="-I$BREW_PREFIX/opt/llvm/include"
+            export LDFLAGS="-L$BREW_PREFIX/opt/llvm/lib"
+          fi
+
+          npx cmake-js compile --release
       - name: Copy into prebuilds/ (pkg-prebuilds-copy)
         shell: bash
         run: |
