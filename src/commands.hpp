@@ -72,6 +72,8 @@ template <class... Ts> struct match : Ts... {
   using Ts::operator()...;
 };
 
+template <class... Ts> match(Ts...) -> match<Ts...>;
+
 static Napi::Value ToNapiValue(Napi::Env env, const ObjectValue &v) {
   return std::visit(
       match{
