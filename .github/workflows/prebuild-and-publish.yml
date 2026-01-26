@@ -51,12 +51,17 @@ jobs:
             export CMAKE_C_COMPILER="$CC"
             export CMAKE_CXX_COMPILER="$CXX"
 
+            export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+
             # Often helpful for picking Brew libc++/headers consistently
             export CPPFLAGS="-I$BREW_PREFIX/opt/llvm/include"
             export LDFLAGS="-L$BREW_PREFIX/opt/llvm/lib"
           fi
 
-          npx cmake-js compile --release
+          npx cmake-js compile --release \
+            --CD CMAKE_OSX_SYSROOT="$SDKROOT" \
+            --CD CMAKE_C_COMPILER="$CC" \
+            --CD CMAKE_CXX_COMPILER="$CXX"
       - name: Copy into prebuilds/ (pkg-prebuilds-copy)
         shell: bash
         run: |
