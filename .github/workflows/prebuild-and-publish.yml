@@ -10,44 +10,82 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        node-version: [20, 22]
+        include:
+          - os: ubuntu-latest
+            arch: x64
+          - os: macos-14
+            arch: arm64
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-
+          node-version: 22
       - name: Install system deps (Linux only)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential python3 pkg-config \
+            build-essential pkg-config \
             libtesseract-dev libleptonica-dev
-
       - name: Install system deps (macOS only)
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install tesseract leptonica
-
+          brew install tesseract leptonica pkg-config llvm
       - name: Install deps
-        run: npm ci
+        run: npm ci --ignore-scripts
+      - name: Build addon
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+          CC: ${{ runner.os == 'macOS' && format('{0}/opt/llvm/bin/clang', env.HOMEBREW_PREFIX) || '' }}
+          CXX: ${{ runner.os == 'macOS' && format('{0}/opt/llvm/bin/clang++', env.HOMEBREW_PREFIX) || '' }}
+        run: |
+          # Resolve brew prefix reliably (covers /opt/homebrew and /usr/local)
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            BREW_PREFIX="$(brew --prefix)"
+            export CC="$BREW_PREFIX/opt/llvm/bin/clang"
+            export CXX="$BREW_PREFIX/opt/llvm/bin/clang++"
+            export CMAKE_C_COMPILER="$CC"
+            export CMAKE_CXX_COMPILER="$CXX"
 
-      - name: Build prebuilds
-        run: npm run prebuild
+            export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+
+            # Often helpful for picking Brew libc++/headers consistently
+            export CPPFLAGS="-I$BREW_PREFIX/opt/llvm/include"
+            export LDFLAGS="-L$BREW_PREFIX/opt/llvm/lib"
+          fi
+
+          npx cmake-js compile --release \
+            --CD CMAKE_OSX_SYSROOT="$SDKROOT" \
+            --CD CMAKE_C_COMPILER="$CC" \
+            --CD CMAKE_CXX_COMPILER="$CXX"
+      - name: Copy into prebuilds/ (pkg-prebuilds-copy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_file="$(find build -type f -name "*.node" | head -n 1)"
+          test -n "$node_file"
+          base_dir="$(dirname "$node_file")"
+          file_name="$(basename "$node_file")"
+
+          npx pkg-prebuilds-copy \
+            --baseDir "$base_dir" \
+            --source "$file_name" \
+            --name "node-tesseract-ocr" \
+            --napi_version 10 \
+            --strip \
+            --arch "${{ matrix.arch }}"
 
       - name: Upload prebuilds
         uses: actions/upload-artifact@v4
         with:
-          name: prebuilds-${{ matrix.os }}-node${{ matrix.node-version }}
+          name: prebuilds-${{ matrix.os }}-${{ matrix.arch }}
           path: prebuilds/
           if-no-files-found: error
+
   publish:
     needs: prebuilds
     runs-on: ubuntu-latest
@@ -56,17 +94,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-
       - name: Download prebuild artifacts
         uses: actions/download-artifact@v4
         with:
           path: prebuilds-merged
-
       - name: Merge prebuilds folders
         run: |
           mkdir -p prebuilds
@@ -84,7 +119,7 @@ jobs:
           zip -r prebuilds-${{ github.ref_name }}.zip prebuilds
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci --include=dev --ignore-scripts
 
       - name: Build TypeScript
         run: npm run build:ts

@@ -5,9 +5,9 @@
     "outDir": "./dist/examples",
     "target": "esnext",
     "module": "nodenext",
-    "moduleResolution": "nodenext"
+    "moduleResolution": "nodenext",
+    "declaration": false,
+    "emitDeclarationOnly": false
   },
-  "include": [
-    "./examples/**/*.ts"
-  ]
+  "include": ["./examples/**/*.ts"]
 }
