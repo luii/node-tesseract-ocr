@@ -27,7 +27,7 @@
       "url": "https://github.com/luii/"
     }
   ],
-  "license": "apache-2.0",
+  "license": "Apache-2.0",
   "author": {
     "url": "https://github.com/luii/",
     "name": "luii"
@@ -39,7 +39,7 @@
     "cmake-js",
     "node-addon-api"
   ],
-  "publishconfig": {
+  "publishConfig": {
     "access": "public"
   },
   "scripts": {
@@ -62,10 +62,10 @@
     "README.md",
     "LICENSE.md"
   ],
-  "devdependencies": {
+  "devDependencies": {
+    "vitest": "^2.1.9",
     "@types/node": "^22.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.9"
+    "typescript": "^5.6.0"
   },
   "dependencies": {
     "cmake-js": "^7.4.0",
