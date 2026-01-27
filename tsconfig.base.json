@@ -26,6 +26,7 @@
     "declaration": true,
     "emitDeclarationOnly": false,
     "types": ["node"],
+    "typeRoots": ["node_modules/@types"],
     "baseUrl": "./",
     "rootDir": "./lib"
   },
