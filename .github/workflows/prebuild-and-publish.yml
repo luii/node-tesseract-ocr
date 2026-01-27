@@ -122,7 +122,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build TypeScript
-        run: npm run build:release
+        run: npm run build:ts
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
