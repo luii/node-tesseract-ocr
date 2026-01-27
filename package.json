@@ -44,8 +44,9 @@
   },
   "scripts": {
     "install": "cmake-js compile",
-    "build:debug": "cmake-js compile --debug && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
-    "build:release": "cmake-js compile --release && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
+    "build:ts": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && mkdir -p dist && mv dist/cjs/index.js dist/cjs/index.cjs && mv dist/esm/index.js dist/esm/index.mjs",
+    "build:debug": "cmake-js compile --debug && npm run build:ts",
+    "build:release": "cmake-js compile --release && npm run build:ts",
     "example:recognize": "npm run build:debug && tsc -p tsconfig.examples.json && node -r dotenv/config dist/examples/recognize.js dotenv_config_path=.env.local",
     "test:cpp": "cmake-js compile --release && ./build/release/node-tesseract-ocr-tests",
     "test:js": "vitest run",
