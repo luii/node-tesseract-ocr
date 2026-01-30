@@ -73,7 +73,7 @@ npm run build:release
 
 ## Start
 
-Set `NODE_TESSERACT_DATAPATH` to your traineddata directory (usually `/usr/share/tesseract-ocr/5/tessdata`).
+Set `TESSDATA_PREFIX` to your traineddata directory (usually `/usr/share/tesseract-ocr/5/tessdata`).
 
 ```sh
 env NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata node path/to/your/app.js
@@ -101,7 +101,7 @@ npm run test:js:watch
 ## Examples
 
 ```sh
-env NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata npm run example:recognize
+env TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata npm run example:recognize
 ```
 
 ## Public API
