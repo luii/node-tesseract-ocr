@@ -94,16 +94,29 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   auto options = info[0].As<Napi::Object>();
   CommandInit command{};
 
-  const Napi::Value langOption = options.Get("lang");
-  if (!langOption.IsUndefined()) {
-    if (!langOption.IsArray()) {
+  const Napi::Value dataPathOption = options.Get("dataPath");
+  if (!dataPathOption.IsUndefined()) {
+    if (!dataPathOption.IsString()) {
       deferred.Reject(
-          Napi::TypeError::New(env, "Option 'lang' must be a array of strings")
+          Napi::TypeError::New(env, "Option 'dataPath' must be a string")
               .Value());
       return deferred.Promise();
     }
 
-    Napi::Array languages = langOption.As<Napi::Array>();
+    Napi::String dataPath = dataPathOption.As<Napi::String>();
+    command.data_path = dataPath.Utf8Value();
+  }
+
+  const Napi::Value langsOption = options.Get("langs");
+  if (!langsOption.IsUndefined()) {
+    if (!langsOption.IsArray()) {
+      deferred.Reject(
+          Napi::TypeError::New(env, "Option 'langs' must be a array of strings")
+              .Value());
+      return deferred.Promise();
+    }
+
+    Napi::Array languages = langsOption.As<Napi::Array>();
     std::string language;
 
     for (uint32_t i = 0; i < languages.Length(); ++i) {

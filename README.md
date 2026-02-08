@@ -16,7 +16,6 @@ Native C++ addon for Node.js that exposes Tesseract OCR (`libtesseract-dev`) to 
   - [Enums](#enums)
   - [Types](#types)
   - [Tesseract API](#tesseract-api)
-- [Example](#example)
 - [License](#license)
 - [Special Thanks](#special-thanks)
 
@@ -25,6 +24,7 @@ Native C++ addon for Node.js that exposes Tesseract OCR (`libtesseract-dev`) to 
 - Native bindings to Tesseract (prebuilds via `pkg-prebuilds`)
 - Access to Tesseract enums and configuration from TypeScript
 - Progress callback and multiple output formats
+- Lazy download of missing traineddata (configurable)
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ Native C++ addon for Node.js that exposes Tesseract OCR (`libtesseract-dev`) to 
 - c++ build toolchain (e.g. build-essentials)
 - libtesseract-dev
 - libleptonica-dev
-- Tesseract training data (eng, deu, ...)
+- Tesseract training data (eng, deu, ...) or let the library handle that
 
 > See [Install](#install)
 
@@ -59,7 +59,9 @@ Install additional languages as needed, for example:
 sudo apt install -y tesseract-ocr-deu tesseract-ocr-eng tesseract-ocr-jpn
 ```
 
-If you install traineddata files manually, make sure `NODE_TESSERACT_DATAPATH` points to the directory that contains them (for example `/usr/share/tesseract-ocr/5/tessdata`).
+If you install traineddata files manually, make sure `TESSDATA_PREFIX` points to the directory that contains them (for example `/usr/share/tessdata`).
+
+If traineddata is missing, this package will download it lazily during `init` by default. You can control this behavior via `ensureTraineddata`, `cachePath`, and `dataPath`.
 
 ## Build
 
@@ -73,11 +75,13 @@ npm run build:release
 
 ## Start
 
-Set `TESSDATA_PREFIX` to your traineddata directory (usually `/usr/share/tesseract-ocr/5/tessdata`).
+Set `TESSDATA_PREFIX` to your traineddata directory (usually `/usr/share/tesseract-ocr/5/tessdata` or `/usr/share/tessdata`).
 
 ```sh
-env NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata node path/to/your/app.js
+env TESSDATA_PREFIX=/usr/share/tessdata node path/to/your/app.js
 ```
+
+If you prefer automatic downloads, you can skip setting `TESSDATA_PREFIX` and let the default cache directory handle traineddata on first use.
 
 ## Scripts
 
@@ -85,9 +89,6 @@ env NODE_TESSERACT_DATAPATH=/usr/share/tesseract-ocr/5/tessdata node path/to/you
 # Build native addon + TS outputs (debug / release)
 npm run build:debug
 npm run build:release
-
-# Build precompiled binaries for distribution
-npm run prebuild
 
 # Run the JS example (builds debug first)
 npm run example:recognize
@@ -100,8 +101,73 @@ npm run test:js:watch
 
 ## Examples
 
+### Run Included Example
+
 ```sh
-env TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata npm run example:recognize
+env TESSDATA_PREFIX=/usr/share/tessdata npm run example:recognize
+```
+
+### Basic OCR (Local Traineddata)
+
+You can find a similar example in the `examples/` folder of the project.
+
+```ts
+import fs from "node:fs";
+import Tesseract, { OcrEngineModes } from "node-tesseract-ocr";
+
+process.env.TESSDATA_PREFIX = "/usr/share/tessdata/";
+
+async function main() {
+  const tesseract = new Tesseract();
+  await tesseract.init({
+    langs: ["eng"],
+  });
+
+  const buffer = fs.readFileSync("example1.png");
+  await tesseract.setImage(buffer);
+  await tesseract.recognize((info) => {
+    console.log(`Progress: ${info.percent}%`);
+  });
+
+  const text = await tesseract.getUTF8Text();
+  console.log(text);
+
+  await tesseract.end();
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+```
+
+### Lazy Traineddata Download (Default)
+
+```ts
+import fs from "node:fs";
+import Tesseract from "node-tesseract-ocr";
+
+async function main() {
+  const tesseract = new Tesseract();
+  await tesseract.init({
+    langs: ["eng"],
+    ensureTraineddata: true
+    dataPath: './tessdata-local'
+  });
+
+  const buffer = fs.readFileSync("example1.png");
+  await tesseract.setImage(buffer);
+  await tesseract.recognize();
+  const text = await tesseract.getUTF8Text();
+  console.log(text);
+
+  await tesseract.end();
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 ```
 
 ## Public API
@@ -151,13 +217,17 @@ Full list of page segmentation modes from Tesseract.
 
 #### `TesseractInitOptions`
 
-| Field                   | Type                                                                                                  | Optional | Default     | Description                             |
-| ----------------------- | ----------------------------------------------------------------------------------------------------- | -------- | ----------- | --------------------------------------- |
-| `lang`                  | [`Language[]`](#availablelanguages)                                                                   | Yes      | `undefined` | Languages to load as an array.          |
-| `oem`                   | [`OcrEngineMode`](#ocrenginemode)                                                                     | Yes      | `undefined` | OCR engine mode.                        |
-| `vars`                  | `Partial<Record<keyof ConfigurationVariables, ConfigurationVariables[keyof ConfigurationVariables]>>` | Yes      | `undefined` | Variables to set.                       |
-| `configs`               | `Array<string>`                                                                                       | Yes      | `undefined` | Tesseract config files to apply.        |
-| `setOnlyNonDebugParams` | `boolean`                                                                                             | Yes      | `undefined` | If true, only non-debug params are set. |
+| Field                   | Type                                                                                                  | Optional | Default                                | Description                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | -------- | -------------------------------------- | --------------------------------------- |
+| `langs`                 | [`Language[]`](#availablelanguages)                                                                   | Yes      | `undefined`                            | Languages to load as an array.          |
+| `oem`                   | [`OcrEngineMode`](#ocrenginemode)                                                                     | Yes      | `undefined`                            | OCR engine mode.                        |
+| `vars`                  | `Partial<Record<keyof ConfigurationVariables, ConfigurationVariables[keyof ConfigurationVariables]>>` | Yes      | `undefined`                            | Variables to set.                       |
+| `configs`               | `Array<string>`                                                                                       | Yes      | `undefined`                            | Tesseract config files to apply.        |
+| `setOnlyNonDebugParams` | `boolean`                                                                                             | Yes      | `undefined`                            | If true, only non-debug params are set. |
+| `ensureTraineddata`     | `boolean`                                                                                             | Yes      | `true`                                 | Download missing traineddata lazily.    |
+| `cachePath`             | `string`                                                                                              | Yes      | `~/.cache/node-tesseract-ocr/tessdata` | Cache directory for downloads.          |
+| `dataPath`              | `string`                                                                                              | Yes      | `TESSDATA_PREFIX` or `cachePath`       | Directory used by Tesseract for data.   |
+| `progressCallback`      | `(info: TrainingDataDownloadProgress) => void`                                                        | Yes      | `undefined`                            | Download progress callback.             |
 
 #### `TesseractSetRectangleOptions`
 
@@ -462,39 +532,6 @@ Ends the instance.
 
 ```ts
 end(): Promise<void>
-```
-
-## Example
-
-You can find a similar example in the `examples/` folder of the project
-
-```ts
-import fs from "node:fs";
-import Tesseract, { OcrEngineModes } from "node-tesseract-ocr";
-
-async function main() {
-  const tesseract = new Tesseract();
-  await tesseract.init({
-    lang: ["eng"],
-    oem: OcrEngineModes.OEM_LSTM_ONLY,
-  });
-
-  const buffer = fs.readFileSync("example1.png");
-  await tesseract.setImage(buffer);
-  await tesseract.recognize((info) => {
-    console.log(`Progress: ${info.percent}%`);
-  });
-
-  const text = await tesseract.getUTF8Text();
-  console.log(text);
-
-  await tesseract.end();
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
 ```
 
 ## License
