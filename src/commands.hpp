@@ -18,7 +18,6 @@
 
 #include "monitor.hpp"
 #include "utils.hpp"
-#include <iostream>
 #include <memory>
 #include <napi.h>
 #include <optional>

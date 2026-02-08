@@ -65,6 +65,4 @@ private:
 
   Napi::Env _env;
   WorkerThread _worker_thread;
-
-  const std::string _data_path = std::getenv("TESSDATA_PREFIX");
 };

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Tesseract, {
   Language,
-  OcrEngineModes,
   PageSegmentationModes,
   TesseractInstance,
 } from "../../lib/index";
@@ -23,24 +22,25 @@ describe("tesseract api validation", () => {
     await tesseract?.end();
   });
 
-  it("rejects init without options", async () => {
+  it("accepts init without options", async () => {
     const instance = new Tesseract();
-    // @ts-expect-error - testing runtime validation for missing options
-    await expect(instance.init()).rejects.toThrow(
-      "Expected required argument at index 0 to be of type object",
-    );
+    await expect(
+      instance.init({ ensureTraineddata: false }),
+    ).resolves.toBeUndefined();
   });
 
-  it("skips sparse languages (e.g. `undefined`) in `lang`", async () => {
+  it("skips sparse languages (e.g. `undefined`) in `langs`", async () => {
     const instance = new Tesseract();
-    // @ts-expect-error - sparse languages array
-    await expect(instance.init({ lang: [, "eng"] })).resolves.toBeUndefined();
     await expect(
       // @ts-expect-error - sparse languages array
-      instance.init({ lang: ["deu", , "eng"] }),
+      instance.init({ langs: [, "eng"], ensureTraineddata: false }),
     ).resolves.toBeUndefined();
     await expect(
-      instance.init({ lang: ["deu", "eng"] }),
+      // @ts-expect-error - sparse languages array
+      instance.init({ langs: ["deu", , "eng"], ensureTraineddata: false }),
+    ).resolves.toBeUndefined();
+    await expect(
+      instance.init({ langs: ["deu", "eng"], ensureTraineddata: false }),
     ).resolves.toBeUndefined();
     await expect(instance.getInitLanguages()).resolves.toBe("deu+eng");
     await instance.end();
@@ -49,8 +49,8 @@ describe("tesseract api validation", () => {
   it("rejects init with invalid lang type", async () => {
     const instance = new Tesseract();
     // @ts-expect-error - testing runtime validation for invalid type
-    await expect(instance.init({ lang: 123 })).rejects.toThrow(
-      "Option 'lang' must be a array of strings",
+    await expect(instance.init({ langs: 123 })).rejects.toThrow(
+      "options.langs is not iterable",
     );
   });
 
@@ -70,18 +70,11 @@ describe("tesseract api validation", () => {
     );
   });
 
-  it("rejects init when only varsVec or varsValues is provided", async () => {
-    const instance = new Tesseract();
-    await expect(instance.init({ varsVec: ["a"] })).rejects.toThrow(
-      "Options 'varsVec' and 'varsValues' must be provided together",
-    );
-  });
-
-  it("rejects init when varsVec and varsValues lengths differ", async () => {
+  it("rejects init when only a vars key is provided", async () => {
     const instance = new Tesseract();
     await expect(
-      instance.init({ varsVec: ["a"], varsValues: ["b", "c"] }),
-    ).rejects.toThrow("'varsVec' and 'varsValues' must have the same length");
+      instance.init({ vars: { allow_blob_division: undefined } }),
+    ).rejects.toThrow("'vars' must contain only strings");
   });
 
   it("rejects setPageMode with non-number", async () => {
@@ -111,13 +104,13 @@ describe("tesseract api validation", () => {
 describe("tesseract api integration", () => {
   it("initializes and ends", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [Language.eng] });
+    await instance.init({ langs: [Language.eng] });
     await instance.end();
   });
 
   it("accepts valid page mode", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [Language.eng] });
+    await instance.init({ langs: [Language.eng] });
     await instance.setPageMode(PageSegmentationModes.PSM_SINGLE_LINE);
     await instance.end();
   });
@@ -126,7 +119,7 @@ describe("tesseract api integration", () => {
     const progressCallbackSpy = vi.fn();
     const instance = new Tesseract();
     await instance.init({
-      lang: [Language.eng],
+      langs: [Language.eng],
     });
     await instance.setImage(exampleImage);
     await instance.recognize(progressCallbackSpy);
@@ -140,7 +133,7 @@ describe("tesseract api integration", () => {
   it("supports HOCR and orientation detection", async () => {
     const progressCallbackSpy = vi.fn();
     const instance = new Tesseract();
-    await instance.init({ lang: [Language.eng] });
+    await instance.init({ langs: [Language.eng] });
     await instance.setImage(exampleImage);
     const hocr = await instance.getHOCRText(progressCallbackSpy);
     expect(hocr).toBeTypeOf("string");
@@ -155,7 +148,7 @@ describe("tesseract api integration", () => {
 
   it("sets and reads variables", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [Language.eng] });
+    await instance.init({ langs: [Language.eng] });
     await instance.setVariable("tessedit_char_whitelist", "abc");
     const value = await instance.getStringVariable("tessedit_char_whitelist");
     expect(value).toBeTypeOf("string");
@@ -165,18 +158,17 @@ describe("tesseract api integration", () => {
 
   it("supports rectangle and source resolution", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [Language.eng] });
+    await instance.init({ langs: [Language.eng] });
     await instance.setImage(exampleImage);
     await instance.setRectangle({ left: 0, top: 0, width: 50, height: 50 });
     await instance.setSourceResolution(300);
     await instance.end();
   });
 
-  it("should set `eng` and `osd` as available languages by default", async () => {
+  it("should set `osd` as available languages by default", async () => {
     const instance = new Tesseract();
-    await instance.init({ lang: [] });
+    await instance.init({ dataPath: "./traineddata-local", langs: [] });
     await expect(instance.getAvailableLanguages()).resolves.toStrictEqual([
-      "eng",
       "osd",
     ]);
     await instance.end();

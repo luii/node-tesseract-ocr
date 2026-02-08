@@ -904,26 +904,94 @@ export interface TesseractInitOptions {
   /**
    * Its generally safer to use as few languages as possible.
    * The more languages Tesseract needs to load the longer it takes to recognize a image.
-   * @public
+   * The OSD Language will always be loaded to support orientation and script detection
+   * IMPORTANT: if you specify more than one language here (e.g.: `deu, eng` for example)
+   *            tesseract will try to recognize german and english in the same image.
+   *            Originally tesseract itself accepts it as `deu+eng`, but since this
+   *            makes typing very hard to near impossible its safer to just accept a
+   *            array with the languages it should look for.
+   *            When talking about "hard typing/impossible typing" its because typescript
+   *            itself cannot create recursive types, and chaining template types
+   *            (e.g.: `${Language}+${Language}+...`) stretches out the compilation time
+   *            to a unacceptable amount
+   *
+   * @default [Language.osd]
    */
-  lang?: Language[];
+  langs?: Language[];
+
+  /**
+   * Specify where the trainingdata is located
+   * Besides the datapath in general it is versioned to the
+   * version of tesseract
+   * @default '~/.cache/node-tesseract-ocr/'
+   */
+  cachePath?: string;
+
+  /**
+   * Explicit datapath for traineddata. Takes precedence over
+   * the `TESSDATA_PREFIX` environment variable.
+   */
+  dataPath?: string;
+
+  /**
+   * This will be called for every language that was specified in `lang`,
+   * it allows the user to be flexible about the training data's location
+   * Or if he needs to specify his own location for certain languages/custom languages
+   * IMPORTANT: Ensures that trainingdata will be downloaded from the following cdn
+   *            in case they dont exist
+   *       OEM_LSTM_ONLY => https://cdn.jsdelivr.net/npm/@tesseract.js-data/${lang}/4.0.0_best_int
+   *   NON OEM_LSTM_ONLY => https://cdn.jsdelivr.net/npm/@tesseract.js-data/${lang}/4.0.0
+   * NOTE: Tesseract 5.x.x still uses the 4.x.x trainingdata
+   *
+   * @default true
+   */
+  ensureTraineddata?: boolean;
+
+  /**
+   * Optional progress callback for traineddata downloads.
+   */
+  progressCallback?: (info: TrainingDataDownloadProgress) => void;
 
   /**
    * OCR Engine Modes
    * The engine mode cannot be changed after creating the instance
    * If another mode is needed, its advised to create a new instance.
+   * @default OEM_DEFAULT
    * @throws {Error} Will throw an error when oem mode is below 0 or over 3
    */
   oem?: OcrEngineMode;
+
+  /**
+   * Controls if only non debug parameters will be set upon initialization
+   * @default false
+   */
   setOnlyNonDebugParams?: boolean;
+
+  /**
+   * Array of paths that point to their corresponding config files
+   * usually located in the `dataPath` location alongside the training data
+   */
   configs?: Array<string>;
 
+  /**
+   * Record of parameters that should be set upon initialization
+   * Consult the original documentation of tesseract on which variables
+   * can actually be set
+   */
   vars?: Partial<
     Record<
       keyof ConfigurationVariables,
       ConfigurationVariables[keyof ConfigurationVariables]
     >
   >;
+}
+
+export interface TrainingDataDownloadProgress {
+  lang: Language;
+  url: string;
+  downloadedBytes: number;
+  totalBytes?: number;
+  percent?: number;
 }
 
 export interface TesseractSetRectangleOptions {
@@ -996,6 +1064,14 @@ export interface DetectOrientationScriptResult {
    */
   scriptConfidence: number;
 }
+
+export type EnsureTrainedDataOptions = {
+  lang: Language;
+  cachePath: string;
+  dataPath: string;
+  downloadBaseUrl: string;
+  progressCallback?: (info: TrainingDataDownloadProgress) => void;
+};
 
 export interface TesseractInstance {
   /**
@@ -1181,18 +1257,37 @@ export interface TesseractInstance {
 export type NativeTesseract = TesseractInstance;
 export type TesseractConstructor = new () => TesseractInstance;
 
-const fs = require("node:fs");
-const path = require("node:path");
+import { existsSync, createWriteStream } from "node:fs";
+import { mkdir, rename, rm, copyFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
+import { lock } from "proper-lockfile";
+import { isValidTraineddata } from "./utils";
+
+const TESSDATA4_BEST = (lang: Language) =>
+  `https://cdn.jsdelivr.net/npm/@tesseract.js-data/${lang}/4.0.0_best_int/`;
+const TESSDATA4 = (lang: Language) =>
+  `https://cdn.jsdelivr.net/npm/@tesseract.js-data/${lang}/4.0.0/`;
+
+const DEFAULT_CACHE_DIR = path.join(
+  os.homedir(),
+  ".cache",
+  "node-tesseract-ocr",
+  "tessdata",
+);
 
 const rootFromSource = path.resolve(__dirname, "../../");
 const bindingOptionsFromSource = path.resolve(
   rootFromSource,
   "binding-options.js",
 );
-const bindingOptionsPath = fs.existsSync(bindingOptionsFromSource)
+const bindingOptionsPath = existsSync(bindingOptionsFromSource)
   ? bindingOptionsFromSource
   : path.resolve(process.cwd(), "binding-options.js");
-const prebuildRoot = fs.existsSync(bindingOptionsFromSource)
+const prebuildRoot = existsSync(bindingOptionsFromSource)
   ? rootFromSource
   : process.cwd();
 
@@ -1205,18 +1300,145 @@ class Tesseract extends NativeTesseract {
   constructor() {
     super();
   }
-  async init(options: TesseractInitOptions) {
-    // scan train data for any files
-    // check whether the requested langs are available/cached
-    // if not
-    //   fetch traineddata from cdn
-    //     - add .lock file to downloaded file (while downloading, so other instances
-    //       can wait on it and dont have to download again)
-    //     - place into tesseract standard folder
-    //  if available
-    //    just go on with the init function of the native addon
+  async init(options: TesseractInitOptions = {}) {
+    options.langs ??= [];
+    options.ensureTraineddata ??= true;
+    options.cachePath ??= DEFAULT_CACHE_DIR;
+    options.dataPath ??= process.env.TESSDATA_PREFIX ?? options.cachePath;
+    options.progressCallback ??= undefined;
+
+    const cachePath = path.resolve(options.cachePath);
+    const dataPath = path.resolve(options.dataPath);
+
+    if (options.ensureTraineddata) {
+      for (const lang of [...options.langs, Language.osd]) {
+        const downloadBaseUrl =
+          options.oem === OcrEngineModes.OEM_LSTM_ONLY
+            ? TESSDATA4_BEST(lang)
+            : TESSDATA4(lang);
+
+        lang &&
+          (await this.ensureTrainingData(
+            { lang, dataPath, cachePath, downloadBaseUrl },
+            options.progressCallback,
+          ));
+      }
+    }
 
     return super.init(options);
+  }
+
+  async ensureTrainingData(
+    { lang, dataPath, cachePath, downloadBaseUrl }: EnsureTrainedDataOptions,
+    progressCallback?: (info: TrainingDataDownloadProgress) => void,
+  ) {
+    const traineddataPath = path.join(dataPath, `${lang}.traineddata`);
+    const cacheTraineddataPath = path.join(cachePath, `${lang}.traineddata`);
+
+    if (await isValidTraineddata(cacheTraineddataPath)) {
+      if (traineddataPath !== cacheTraineddataPath) {
+        await mkdir(dataPath, { recursive: true });
+        await copyFile(cacheTraineddataPath, traineddataPath);
+      }
+      return traineddataPath;
+    }
+    if (await isValidTraineddata(traineddataPath)) {
+      return traineddataPath;
+    }
+
+    await mkdir(dataPath, { recursive: true });
+
+    const release = await lock(traineddataPath, {
+      lockfilePath: `${traineddataPath}.lock`,
+      stale: 10 * 60 * 1000,
+      update: 30 * 1000,
+      realpath: false,
+      retries: { retries: 50, minTimeout: 200, maxTimeout: 2000 },
+    });
+
+    try {
+      if (await isValidTraineddata(traineddataPath)) {
+        return traineddataPath;
+      }
+      if (
+        traineddataPath !== cacheTraineddataPath &&
+        (await isValidTraineddata(cacheTraineddataPath))
+      ) {
+        await copyFile(cacheTraineddataPath, traineddataPath);
+        return traineddataPath;
+      }
+
+      const url = new URL(`${lang}.traineddata.gz`, downloadBaseUrl).toString();
+      const response = await fetch(url);
+
+      if (!response.ok || !response.body) {
+        throw new Error(
+          `Failed to download traineddata for ${lang}: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const tmpPath = path.join(
+        os.tmpdir(),
+        [
+          "node-tesseract-ocr",
+          lang,
+          "traineddata",
+          process.pid,
+          Date.now(),
+          Math.random().toString(36).slice(2),
+        ].join("-"),
+      );
+      const totalBytesHeader = response.headers.get("content-length");
+      const totalBytes = totalBytesHeader
+        ? Number(totalBytesHeader)
+        : undefined;
+      let downloadedBytes = 0;
+      const progressStream = new Transform({
+        transform(chunk, _, callback) {
+          if (progressCallback) {
+            downloadedBytes += chunk.length;
+            const percent =
+              typeof totalBytes === "number" && Number.isFinite(totalBytes)
+                ? (downloadedBytes / totalBytes) * 100
+                : undefined;
+            progressCallback({
+              lang,
+              url,
+              downloadedBytes,
+              totalBytes: Number.isFinite(totalBytes) ? totalBytes : undefined,
+              percent,
+            });
+          }
+          callback(null, chunk);
+        },
+      });
+
+      try {
+        await pipeline(
+          Readable.fromWeb(response.body),
+          progressStream,
+          createGunzip(),
+          createWriteStream(tmpPath),
+        );
+        try {
+          await rename(tmpPath, traineddataPath);
+        } catch (error) {
+          if ((error as { code?: string }).code === "EXDEV") {
+            await copyFile(tmpPath, traineddataPath);
+            await rm(tmpPath, { force: true });
+          } else {
+            throw error;
+          }
+        }
+      } catch (error) {
+        await rm(tmpPath, { force: true });
+        throw error;
+      }
+
+      return traineddataPath;
+    } finally {
+      await release();
+    }
   }
 }
 

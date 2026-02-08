@@ -1,4 +1,4 @@
-FROM node:lts-bookworm as builder
+FROM node:22-bookworm as builder
 
 RUN apt-get install -y \
   python3 \
@@ -13,16 +13,17 @@ ENV PYTHON=/usr/bin/python3
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-RUN npm ci && npm cache clean --force
+RUN npm ci --ignore-scripts && \
+  npm cache clean --force
 
-COPY . .
+COPY src ./
+COPY lib ./
+COPY tsconfig.(base|cjs|esm).json ./
+COPY CMakeLists.txt ./
+COPY binding-options.js ./
 
-# builds:
-# - native Addon (Release)
-# - CJS into dist/cjs/index.cjs
-# - ESM into dist/esm/index.mjs
 RUN npm run build:release \
   && cp build/Release/node-tesseract-ocr.node dist/
 

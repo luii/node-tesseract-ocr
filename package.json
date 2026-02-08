@@ -1,6 +1,6 @@
 {
   "name": "@luii/node-tesseract-ocr",
-  "version": "2.0.13",
+  "version": "2.1.0",
   "private": false,
   "binary": {
     "napi_versions": [
@@ -63,15 +63,17 @@
     "LICENSE.md"
   ],
   "devDependencies": {
-    "vitest": "^2.1.9",
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.0"
+    "cmake-js": "^8.0.0",
+    "node-addon-api": "^8.5.0",
+    "@types/node": "^25.1.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "dotenv": "^16.4.5",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
-    "cmake-js": "^7.4.0",
-    "node-addon-api": "^8.5.0",
-    "dotenv": "^16.4.5",
-    "pkg-prebuilds": "^1.0.0"
+    "pkg-prebuilds": "^1.0.0",
+    "proper-lockfile": "^4.1.2"
   },
   "exports": {
     "require": {

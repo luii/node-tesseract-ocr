@@ -23,16 +23,32 @@ import {
   Tesseract,
 } from "@luii/node-tesseract-ocr";
 
+const drawProgressBar = (progress: any) => {
+  const barWidth = 30;
+  const filledWidth = Math.floor((progress / 100) * barWidth);
+  const emptyWidth = barWidth - filledWidth;
+  const progressBar = "█".repeat(filledWidth) + "▒".repeat(emptyWidth);
+  return `[${progressBar}] ${progress}%`;
+};
+
 async function main() {
   const buf = readFileSync("./example8.jpg");
   const tesseract = new Tesseract();
 
   try {
     await tesseract.init({
-      lang: [Language.eng],
+      dataPath: "./traineddata-local",
+      langs: [Language.eng],
       oem: OcrEngineModes.OEM_DEFAULT,
       vars: {
-        log_level: LogLevels.TRACE,
+        log_level: LogLevels.ALL,
+      },
+      traineddataProgressCallback: (info) => {
+        process.stdout.clearLine(1);
+        process.stdout.cursorTo(0);
+        process.stdout.write(
+          `${info.lang} download: ${drawProgressBar(info.percent?.toFixed(2))}`,
+        );
       },
     });
     await tesseract.setPageMode(PageSegmentationModes.PSM_OSD_ONLY);
