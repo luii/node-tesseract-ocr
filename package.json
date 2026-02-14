@@ -58,6 +58,7 @@
     "src/**",
     "build/release/*.node",
     "package.json",
+    "binding-options.js",
     "CMakeLists.txt",
     "README.md",
     "LICENSE.md"
