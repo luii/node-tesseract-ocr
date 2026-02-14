@@ -43,7 +43,7 @@ async function main() {
       vars: {
         log_level: LogLevels.ALL,
       },
-      traineddataProgressCallback: (info) => {
+      progressCallback: (info) => {
         process.stdout.clearLine(1);
         process.stdout.cursorTo(0);
         process.stdout.write(
@@ -51,6 +51,7 @@ async function main() {
         );
       },
     });
+
     await tesseract.setPageMode(PageSegmentationModes.PSM_OSD_ONLY);
     await tesseract.setImage(buf);
     await tesseract.setSourceResolution(176);
