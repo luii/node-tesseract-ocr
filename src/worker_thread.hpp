@@ -63,7 +63,9 @@ template <typename C> Napi::Promise WorkerThread::Enqueue(C &&command) {
     std::stop_token token = _worker_thread.get_stop_token();
 
     if (_closing.load() || token.stop_requested()) {
-      deferred.Reject(Napi::Error::New(_env, "Worker is closing").Value());
+      Napi::Error error = Napi::Error::New(_env, "Worker is closing");
+      error.Set("code", Napi::String::New(_env, "ERR_WORKER_CLOSED"));
+      deferred.Reject(error.Value());
       return deferred.Promise();
     }
 

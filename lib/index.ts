@@ -14,6 +14,48 @@
  * permissions and limitations under the License.
  */
 
+import type {
+  EnsureTrainedDataOptions,
+  TesseractDocumentApi,
+  TesseractConstructor,
+  TesseractInitOptions,
+  TrainingDataDownloadProgress,
+} from "./types";
+
+export type {
+  ConfigurationVariables,
+  DebugConfigurationVariableNames,
+  DebugOnlyConfigurationVariables,
+  DetectOrientationScriptResult,
+  EnsureTrainedDataOptions,
+  InitOnlyConfigurationVariables,
+  ProgressChangedInfo,
+  SetBoolConfigurationVariableNames,
+  SetConfigurationVariableNames,
+  SetNumberConfigurationVariableNames,
+  SetStringConfigurationVariableNames,
+  SetVariableConfigVariables,
+  TesseractBeginProcessPagesOptions,
+  TesseractConstructor,
+  TesseractDocumentApi,
+  TesseractInitOptions,
+  TesseractInstance,
+  TesseractProcessPagesStatus,
+  TesseractSetRectangleOptions,
+  TrainingDataDownloadProgress,
+} from "./types";
+export type NativeTesseract = import("./types").TesseractInstance;
+
+import { existsSync, createWriteStream } from "node:fs";
+import { mkdir, rename, rm, copyFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
+import { lock } from "proper-lockfile";
+import { isValidTraineddata } from "./utils";
+
 /**
  * All available languages for tesseract
  * @readonly
@@ -245,40 +287,6 @@ export const LogLevels = {
 
 export type LogLevel = (typeof LogLevels)[keyof typeof LogLevels];
 
-
-import type {
-  EnsureTrainedDataOptions,
-  TesseractConstructor,
-  TesseractInitOptions,
-  TrainingDataDownloadProgress,
-} from "./types";
-
-export type {
-  ConfigurationVariables,
-  DetectOrientationScriptResult,
-  EnsureTrainedDataOptions,
-  InitOnlyConfigurationVariables,
-  ProgressChangedInfo,
-  SetVariableConfigVariables,
-  TesseractBeginProcessPagesOptions,
-  TesseractConstructor,
-  TesseractInitOptions,
-  TesseractInstance,
-  TesseractSetRectangleOptions,
-  TrainingDataDownloadProgress,
-} from "./types";
-export type NativeTesseract = import("./types").TesseractInstance;
-
-import { existsSync, createWriteStream } from "node:fs";
-import { mkdir, rename, rm, copyFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import { createGunzip } from "node:zlib";
-import { lock } from "proper-lockfile";
-import { isValidTraineddata } from "./utils";
-
 const TESSDATA4_BEST = (lang: Language) =>
   `https://cdn.jsdelivr.net/npm/@tesseract.js-data/${lang}/4.0.0_best_int/`;
 const TESSDATA4 = (lang: Language) =>
@@ -309,6 +317,14 @@ const { Tesseract: NativeTesseract } = require("pkg-prebuilds")(
 ) as { Tesseract: TesseractConstructor };
 
 class Tesseract extends NativeTesseract {
+  document: TesseractDocumentApi = {
+    begin: this.beginProcessPages.bind(this),
+    addPage: this.addProcessPage.bind(this),
+    finish: this.finishProcessPages.bind(this),
+    abort: this.abortProcessPages.bind(this),
+    status: this.getProcessPagesStatus.bind(this),
+  };
+
   constructor() {
     super();
   }
