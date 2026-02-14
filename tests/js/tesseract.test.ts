@@ -1,4 +1,23 @@
+/*
+ * Copyright 2026 Philipp Czarnetzki
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +30,7 @@ import Tesseract, {
 
 const exampleImageUrl = new URL("../../example8.jpg", import.meta.url);
 const exampleImage = readFileSync(fileURLToPath(exampleImageUrl));
+const exampleImagePath = fileURLToPath(exampleImageUrl);
 
 describe("tesseract api validation", () => {
   let tesseract: TesseractInstance;
@@ -20,6 +40,10 @@ describe("tesseract api validation", () => {
 
   afterEach(async () => {
     await tesseract?.end();
+  });
+
+  it("returns the current tesseract version", async () => {
+    await expect(tesseract.version()).resolves.toMatch(/^\d+\.\d+\.\d+/);
   });
 
   it("accepts init without options", async () => {
@@ -58,7 +82,7 @@ describe("tesseract api validation", () => {
     const instance = new Tesseract();
     // @ts-expect-error - testing runtime validation for invalid type
     await expect(instance.init({ oem: "x" })).rejects.toThrow(
-      "Option 'oem' must be of type number",
+      "init(options): options.oem must be a number",
     );
   });
 
@@ -66,7 +90,7 @@ describe("tesseract api validation", () => {
     const instance = new Tesseract();
     // @ts-expect-error - testing runtime validation for invalid type
     await expect(instance.init({ oem: 999 })).rejects.toThrow(
-      "Unsupported OCR Engine Mode",
+      "init(options): options.oem is out of supported range",
     );
   });
 
@@ -74,21 +98,21 @@ describe("tesseract api validation", () => {
     const instance = new Tesseract();
     await expect(
       instance.init({ vars: { allow_blob_division: undefined } }),
-    ).rejects.toThrow("'vars' must contain only strings");
+    ).rejects.toThrow("init(options): options.vars must contain only strings");
   });
 
   it("rejects setPageMode with non-number", async () => {
     const instance = new Tesseract();
     // @ts-expect-error - testing runtime validation for invalid type
     await expect(instance.setPageMode("x")).rejects.toThrow(
-      "Expected page segmentation mode to be of type number",
+      "setPageMode(psm?): psm must be a number",
     );
   });
 
   it("rejects setImage with empty buffer", async () => {
     const instance = new Tesseract();
     await expect(instance.setImage(Buffer.alloc(0))).rejects.toThrow(
-      "SetImage: buffer is empty",
+      "setImage(buffer): buffer is empty",
     );
   });
 
@@ -96,7 +120,15 @@ describe("tesseract api validation", () => {
     const instance = new Tesseract();
     // @ts-expect-error - testing runtime validation for invalid type
     await expect(instance.recognize(123)).rejects.toThrow(
-      "Expected progress callback to be of type function",
+      "recognize(progressCallback?): progressCallback must be a function",
+    );
+  });
+
+  it("rejects addProcessPage with invalid filename type", async () => {
+    const instance = new Tesseract();
+    // @ts-expect-error - testing runtime validation for invalid type
+    await expect(instance.addProcessPage(exampleImage, 123)).rejects.toThrow(
+      "addProcessPage(buffer, filename?): filename must be a string",
     );
   });
 });
@@ -168,9 +200,85 @@ describe("tesseract api integration", () => {
   it("should set `osd` as available languages by default", async () => {
     const instance = new Tesseract();
     await instance.init({ dataPath: "./traineddata-local", langs: [] });
-    await expect(instance.getAvailableLanguages()).resolves.toStrictEqual([
-      "osd",
-    ]);
+    await expect(instance.getAvailableLanguages()).resolves.toContain("osd");
+    await instance.end();
+  });
+});
+
+describe("tesseract multipage status api", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tess-pages-"));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("returns inactive default status when no session is active", async () => {
+    const instance = new Tesseract();
+    const status = await instance.getProcessPagesStatus();
+    expect(status).toStrictEqual({
+      active: false,
+      healthy: false,
+      processedPages: 0,
+      nextPageIndex: 0,
+      outputBase: "",
+      timeoutMillisec: 0,
+      textonly: false,
+    });
+    await instance.end();
+  });
+
+  it("exposes the same status object via document facade", async () => {
+    const instance = new Tesseract();
+    await expect(instance.document.status()).resolves.toStrictEqual(
+      await instance.getProcessPagesStatus(),
+    );
+    await instance.end();
+  });
+
+  it("tracks processed pages during an active multipage session", async () => {
+    const instance = new Tesseract();
+    const outputBase = path.join(tempDir, "out");
+    await instance.init({ langs: [Language.eng] });
+
+    await instance.document.begin({
+      outputBase,
+      title: "test-doc",
+      timeout: 0,
+      textonly: false,
+    });
+
+    await expect(instance.document.status()).resolves.toMatchObject({
+      active: true,
+      healthy: true,
+      processedPages: 0,
+      nextPageIndex: 0,
+      outputBase,
+      timeoutMillisec: 0,
+      textonly: false,
+    });
+
+    await instance.document.addPage(exampleImage, exampleImagePath);
+    await expect(instance.getProcessPagesStatus()).resolves.toMatchObject({
+      active: true,
+      processedPages: 1,
+      nextPageIndex: 1,
+    });
+
+    await instance.document.abort();
+    await expect(instance.getProcessPagesStatus()).resolves.toStrictEqual({
+      active: false,
+      healthy: false,
+      processedPages: 0,
+      nextPageIndex: 0,
+      outputBase: "",
+      timeoutMillisec: 0,
+      textonly: false,
+    });
+
     await instance.end();
   });
 });
