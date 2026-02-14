@@ -44,6 +44,13 @@ Napi::Object TesseractWrapper::InitAddon(Napi::Env env, Napi::Object exports) {
           // InstanceMethod("printVariables",
           // &TesseractWrapper::PrintVariables),
           InstanceMethod("setImage", &TesseractWrapper::SetImage),
+          InstanceMethod("beginProcessPages",
+                         &TesseractWrapper::BeginProcessPages),
+          InstanceMethod("addProcessPage", &TesseractWrapper::AddProcessPage),
+          InstanceMethod("finishProcessPages",
+                         &TesseractWrapper::FinishProcessPages),
+          InstanceMethod("abortProcessPages",
+                         &TesseractWrapper::AbortProcessPages),
           InstanceMethod("setPageMode", &TesseractWrapper::SetPageMode),
           InstanceMethod("setRectangle", &TesseractWrapper::SetRectangle),
           InstanceMethod("setSourceResolution",
@@ -517,6 +524,118 @@ Napi::Value TesseractWrapper::SetImage(const Napi::CallbackInfo &info) {
   pixDestroy(&pix);
 
   return _worker_thread.Enqueue(command);
+}
+
+Napi::Value
+TesseractWrapper::BeginProcessPages(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+  CommandBeginProcessPages command{};
+
+  if (info.Length() != 1 || !info[0].IsObject()) {
+    deferred.Reject(
+        Napi::TypeError::New(
+            env, "beginProcessPages(options): options object required")
+            .Value());
+    return deferred.Promise();
+  }
+
+  Napi::Object options = info[0].As<Napi::Object>();
+
+  Napi::Value output_base = options.Get("outputBase");
+  if (!output_base.IsUndefined()) {
+    if (!output_base.IsString()) {
+      deferred.Reject(
+          Napi::TypeError::New(env, "Option 'outputBase' must be a string")
+              .Value());
+      return deferred.Promise();
+    }
+    command.output_base = output_base.As<Napi::String>().Utf8Value();
+  }
+
+  Napi::Value title = options.Get("title");
+  if (title.IsUndefined() || !title.IsString()) {
+    deferred.Reject(Napi::TypeError::New(
+                        env, "Option 'title' is required and must be a string")
+                        .Value());
+    return deferred.Promise();
+  }
+  command.title = title.As<Napi::String>().Utf8Value();
+
+  Napi::Value filename = options.Get("filename");
+  if (!filename.IsUndefined()) {
+    if (!filename.IsString()) {
+      deferred.Reject(
+          Napi::TypeError::New(env, "Option 'filename' must be a string")
+              .Value());
+      return deferred.Promise();
+    }
+    command.filename = filename.As<Napi::String>().Utf8Value();
+  }
+
+  Napi::Value timeout = options.Get("timeout");
+  if (!timeout.IsUndefined()) {
+    if (!timeout.IsNumber()) {
+      deferred.Reject(
+          Napi::TypeError::New(env, "Option 'timeoutMillisec' must be a number")
+              .Value());
+      return deferred.Promise();
+    }
+    command.timeout_millisec = timeout.As<Napi::Number>().Int32Value();
+  }
+
+  Napi::Value textonly = options.Get("textonly");
+  if (!textonly.IsUndefined()) {
+    if (!textonly.IsBoolean()) {
+      deferred.Reject(
+          Napi::TypeError::New(env, "Option 'textonly' must be a boolean")
+              .Value());
+      return deferred.Promise();
+    }
+    command.textonly = textonly.As<Napi::Boolean>().Value();
+  }
+
+  return _worker_thread.Enqueue(std::move(command));
+}
+
+Napi::Value TesseractWrapper::AddProcessPage(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+  CommandAddProcessPage command{};
+
+  if (info.Length() != 1 || !info[0].IsBuffer()) {
+    deferred.Reject(Napi::TypeError::New(
+                        env, "addProcessPage(buffer): buffer argument required")
+                        .Value());
+    return deferred.Promise();
+  }
+
+  Napi::Buffer<uint8_t> page_buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  const size_t length = page_buffer.Length();
+  if (length == 0) {
+    deferred.Reject(
+        Napi::TypeError::New(env, "addProcessPage: buffer is empty").Value());
+    return deferred.Promise();
+  }
+
+  command.page.bytes.resize(length);
+  std::memcpy(command.page.bytes.data(), page_buffer.Data(), length);
+
+  return _worker_thread.Enqueue(std::move(command));
+}
+
+Napi::Value
+TesseractWrapper::FinishProcessPages(const Napi::CallbackInfo &info) {
+  return _worker_thread.Enqueue(CommandFinishProcessPages{});
+}
+
+Napi::Value
+TesseractWrapper::AbortProcessPages(const Napi::CallbackInfo &info) {
+  CommandAbortProcessPages command{};
+  if (info.Length() > 0 && info[0].IsString()) {
+    command.reason = info[0].As<Napi::String>().Utf8Value();
+  }
+  return _worker_thread.Enqueue(std::move(command));
 }
 
 Napi::Value TesseractWrapper::SetRectangle(const Napi::CallbackInfo &info) {

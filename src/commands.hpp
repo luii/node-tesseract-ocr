@@ -18,6 +18,8 @@
 
 #include "monitor.hpp"
 #include "utils.hpp"
+#include <allheaders.h>
+#include <cstddef>
 #include <memory>
 #include <napi.h>
 #include <optional>
@@ -26,6 +28,7 @@
 #include <tesseract/baseapi.h>
 #include <tesseract/ocrclass.h>
 #include <tesseract/publictypes.h>
+#include <tesseract/renderer.h>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -52,20 +55,25 @@ struct ResultString {
   std::string value;
 };
 
-using ObjectValue = std::variant<bool, int, double, float, std::string,
-                                 std::vector<std::string>>;
+struct ResultBuffer {
+  std::vector<uint8_t> value;
+};
+
+using ObjectValue =
+    std::variant<bool, int, double, float, std::string,
+                 std::vector<std::string>, std::vector<uint8_t>>;
 
 struct ResultObject {
   std::unordered_map<std::string, ObjectValue> value;
 };
 
 struct ResultArray {
-  std::vector<std::string> value;
+  std::vector<ObjectValue> value;
 };
 
 using Result =
     std::variant<ResultVoid, ResultBool, ResultInt, ResultDouble, ResultFloat,
-                 ResultString, ResultArray, ResultObject>;
+                 ResultString, ResultArray, ResultBuffer, ResultObject>;
 
 template <class... Ts> struct match : Ts... {
   using Ts::operator()...;
@@ -80,10 +88,13 @@ static Napi::Value ToNapiValue(Napi::Env env, const ObjectValue &v) {
           [&](int i) -> Napi::Value { return Napi::Number::New(env, i); },
           [&](double d) -> Napi::Value { return Napi::Number::New(env, d); },
           [&](float f) -> Napi::Value { return Napi::Number::New(env, f); },
-          [&](const std::string &s) -> Napi::Value {
+          [&](const std::string &s) -> Napi::Value { // String
             return Napi::String::New(env, s);
           },
-          [&](const std::vector<std::string> &vec) -> Napi::Value {
+          [&](const std::vector<uint8_t> &vec) -> Napi::Value { // Buffer
+            return Napi::Buffer<uint8_t>::Copy(env, vec.data(), vec.size());
+          },
+          [&](const std::vector<std::string> &vec) -> Napi::Value { // Array
             Napi::Array arr = Napi::Array::New(env, vec.size());
             for (size_t i = 0; i < vec.size(); ++i) {
               arr.Set(static_cast<uint32_t>(i), vec[i]);
@@ -112,6 +123,10 @@ inline Napi::Value MatchResult(Napi::Env env, const Result &r) {
             [&](const ResultString &v) -> Napi::Value {
               return Napi::String::New(env, v.value);
             },
+            [&](const ResultBuffer &v) -> Napi::Value {
+              return Napi::Buffer<uint8_t>::Copy(env, v.value.data(),
+                                                 v.value.size());
+            },
             [&](const ResultArray &v) -> Napi::Value {
               const size_t n = v.value.size();
 
@@ -136,6 +151,346 @@ inline Napi::Value MatchResult(Napi::Env env, const Result &r) {
             }},
       r);
 }
+
+struct CommandVersion {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    return ResultString{api.Version()};
+  }
+};
+
+struct CommandSetInputName {
+  std::string input_name;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    api.SetInputName(input_name.c_str());
+    return ResultVoid{};
+  }
+};
+
+struct CommandGetInputName {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    return ResultString{api.GetInputName()};
+  }
+};
+
+struct CommandSetInputImage {
+  std::vector<uint8_t> bytes;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    if (bytes.size() == 0) {
+      throw_runtime("Input Image Buffer is empty");
+    }
+
+    Pix *pix = pixReadMem(bytes.data(), bytes.size());
+    api.SetInputImage(pix);
+    pixDestroy(&pix); // do i need that since SetInputImage takes ownership?
+    return ResultVoid{};
+  }
+};
+
+struct CommandGetInputImage {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    Pix *pix = api.GetInputImage();
+
+    if (pix == nullptr) {
+      throw_runtime("Could not get Input image");
+    }
+
+    l_uint32 *data = pixGetData(pix);
+    l_int32 wpl = pixGetWpl(pix);
+    l_int32 h = pixGetHeight(pix);
+
+    size_t bytecount = wpl * 4 * h;
+    lept_free(&pix);
+
+    std::vector<uint8_t> buffer(data, data + bytecount);
+
+    return ResultBuffer{buffer};
+  }
+};
+
+struct CommandGetSourceYResolution {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    int source_y_resolution = api.GetSourceYResolution();
+    return ResultInt{source_y_resolution};
+  }
+};
+
+struct CommandGetDataPath {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    const char *data_path = api.GetDatapath();
+
+    if (data_path == nullptr) {
+      throw_runtime("No data path set");
+    }
+
+    return ResultString{data_path};
+  }
+};
+
+struct CommandSetOutputName {
+  std::string output_name;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    if (output_name.empty()) {
+      throw_runtime("Output name is empty or not set");
+    }
+
+    api.SetOutputName(output_name.c_str());
+    return ResultVoid{};
+  }
+};
+
+struct CommandClearPersistentCache {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    api.ClearPersistentCache();
+    return ResultVoid{};
+  }
+};
+
+struct CommandClearAdaptiveClassifier {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    api.ClearAdaptiveClassifier();
+    return ResultVoid{};
+  }
+};
+
+struct CommandGetThresholdedImage {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    Pix *pix = api.GetThresholdedImage();
+
+    if (pix == nullptr) {
+      throw_runtime("Could not get Input image");
+    }
+
+    l_uint32 *data = pixGetData(pix);
+    l_int32 wpl = pixGetWpl(pix);
+    l_int32 h = pixGetHeight(pix);
+
+    size_t bytecount = wpl * 4 * h;
+    lept_free(&pix);
+
+    std::vector<uint8_t> buffer(data, data + bytecount);
+
+    return ResultBuffer{buffer};
+  }
+};
+
+struct CommandGetThresholdedImageScaleFactor {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    int scale_factor = api.GetThresholdedImageScaleFactor();
+    return ResultInt{scale_factor};
+  }
+};
+
+struct EncodedImageBuffer {
+  std::vector<uint8_t> bytes;
+};
+
+struct ProcessPagesSession {
+  std::unique_ptr<tesseract::TessPDFRenderer> renderer;
+  std::string output_base;
+  std::string filename;
+  int timeout_millisec{0};
+  int next_page_index{0};
+};
+
+struct CommandBeginProcessPages {
+  std::string output_base;
+  std::string title;
+  std::string filename;
+  int timeout_millisec{0}; // 0 = unlimited timeout
+  bool textonly{false};
+  Result invoke(tesseract::TessBaseAPI &api,
+                std::optional<ProcessPagesSession> &session) const {
+    if (session.has_value()) {
+      throw_runtime(
+          "beginProcessPages called while a session is already active");
+    }
+    if (title.empty()) {
+      throw_runtime("beginProcessPages: title cannot be empty");
+    }
+
+    const char *input_name = api.GetInputName();
+    std::string effective_output_base = output_base;
+    std::string effective_filename = filename;
+
+    if (effective_output_base.empty()) {
+      if (input_name == nullptr || *input_name == '\0') {
+        throw_runtime("beginProcessPages: output_base is empty and "
+                      "TessBaseAPI::GetInputName() returned null/empty");
+      }
+      effective_output_base = input_name;
+    }
+
+    if (effective_filename.empty()) {
+      if (input_name == nullptr || *input_name == '\0') {
+        throw_runtime("beginProcessPages: filename is empty and "
+                      "TessBaseAPI::GetInputName() returned null/empty");
+      }
+      effective_filename = input_name;
+    }
+
+    auto renderer = std::make_unique<tesseract::TessPDFRenderer>(
+        effective_output_base.c_str(), api.GetDatapath(), textonly);
+    if (!renderer->happy()) {
+      throw_runtime("beginProcessPages: renderer is not healthy");
+    }
+    if (!renderer->BeginDocument(title.c_str())) {
+      throw_runtime("beginProcessPages: could not begin document");
+    }
+
+    session.emplace();
+    session->renderer = std::move(renderer);
+    session->output_base = std::move(effective_output_base);
+    session->filename = std::move(effective_filename);
+    session->timeout_millisec = timeout_millisec;
+    session->next_page_index = 0;
+    return ResultVoid{};
+  }
+};
+
+struct CommandAddProcessPage {
+  EncodedImageBuffer page;
+  Result invoke(tesseract::TessBaseAPI &api,
+                std::optional<ProcessPagesSession> &session) const {
+    if (!session.has_value()) {
+      throw_runtime("addProcessPage called without an active session");
+    }
+    if (!session->renderer->happy()) {
+      throw_runtime("addProcessPage: renderer is not healthy");
+    }
+    if (page.bytes.empty()) {
+      throw_runtime("addProcessPage: buffer is empty");
+    }
+
+    Pix *pix = pixReadMem(page.bytes.data(), page.bytes.size());
+    if (pix == nullptr) {
+      throw_runtime("addProcessPage: failed to decode image buffer");
+    }
+
+    bool success = api.ProcessPage(
+        pix, session->next_page_index, session->filename.c_str(), nullptr,
+        session->timeout_millisec, session->renderer.get());
+    pixDestroy(&pix);
+
+    if (!success) {
+      throw_runtime("addProcessPage: ProcessPage failed at page {}",
+                    session->next_page_index);
+    }
+
+    session->next_page_index++;
+    return ResultVoid{};
+  }
+};
+
+struct CommandFinishProcessPages {
+  Result invoke(tesseract::TessBaseAPI &,
+                std::optional<ProcessPagesSession> &session) const {
+    if (!session.has_value()) {
+      throw_runtime("finishProcessPages called without an active session");
+    }
+    if (!session->renderer->happy()) {
+      throw_runtime("finishProcessPages: renderer is not healthy");
+    }
+    if (!session->renderer->EndDocument()) {
+      throw_runtime("finishProcessPages: could not finalize document");
+    }
+
+    std::string output_filepath = session->output_base + ".pdf";
+    session.reset();
+    return ResultString{std::move(output_filepath)};
+  }
+};
+
+struct CommandAbortProcessPages {
+  std::string reason;
+  Result invoke(tesseract::TessBaseAPI &,
+                std::optional<ProcessPagesSession> &session) const {
+    session.reset();
+    return ResultVoid{};
+  }
+};
+
+// struct CommandProcessPages {
+//   std::vector<EncodedImageBuffer> buffers;
+//   std::string output_base; // actual name of the file that will be outputted
+//   std::string title;       // metadata title of the resulting pdf
+//   std::string filename;    // metadata filename of the resulting pdf
+//   int timeout_millisec{0}; // 0 = unlimited timeout
+//   const bool textonly{false};
+//   Result invoke(tesseract::TessBaseAPI &api) const {
+//     std::string effective_output_base = output_base;
+//     std::string effective_filename = filename;
+//     const char *input_name = api.GetInputName();
+//
+//     if (effective_output_base.empty()) {
+//       if (input_name == nullptr || *input_name == '\0') {
+//         throw_runtime("CommandProcessPages: output_base is empty and "
+//                       "GetInputName() returned null/empty");
+//       }
+//       effective_output_base = input_name;
+//     }
+//
+//     if (effective_filename.empty()) {
+//       if (input_name == nullptr || *input_name == '\0') {
+//         throw_runtime("CommandProcessPages: filename is empty and "
+//                       "GetInputName() returned null/empty");
+//       }
+//       effective_filename = input_name;
+//     }
+//
+//     if (title.empty()) {
+//       throw_runtime("CommandProcessPages: No title set");
+//     }
+//
+//     auto renderer = std::make_unique<tesseract::TessPDFRenderer>(
+//         effective_output_base.c_str(), api.GetDatapath(), textonly);
+//
+//     if (!renderer->happy()) {
+//       throw_runtime("CommandProcessPages: TessPDFRenderer is not happy");
+//     }
+//
+//     bool started = renderer->BeginDocument(title.c_str());
+//
+//     if (!started) {
+//       throw_runtime("CommandProcessPages: Failed to begin new document "
+//                     "(filename: {}, output_base: {})",
+//                     effective_filename, effective_output_base);
+//     }
+//
+//     for (int i = 0; i < static_cast<int>(buffers.size()); ++i) {
+//       if (!renderer->happy()) {
+//         throw_runtime("CommandProcessPages: Renderer became unhealthy while "
+//                       "processing page {}",
+//                       i);
+//       }
+//
+//       const EncodedImageBuffer &encoded = buffers[static_cast<size_t>(i)];
+//       Pix *pix = pixReadMem(encoded.bytes.data(), encoded.bytes.size());
+//
+//       if (!pix) {
+//         continue;
+//       }
+//
+//       bool succeed = api.ProcessPage(pix, i, effective_filename.c_str(),
+//                                      nullptr, timeout_millisec,
+//                                      renderer.get());
+//
+//       pixDestroy(&pix);
+//
+//       if (!succeed) {
+//         continue; // silently continue with the next page?
+//       }
+//     }
+//
+//     bool ended = renderer->EndDocument();
+//
+//     if (!ended) {
+//       throw_runtime("CommandProcessPages: Renderer could not end document");
+//     }
+//
+//     std::string output_filepath = effective_output_base + ".pdf";
+//     return ResultString{output_filepath};
+//   }
+// };
 
 struct CommandInit {
   std::string data_path, language;
@@ -194,9 +549,26 @@ struct CommandAnalyseLayout {
   }
 };
 
+struct CommandSetDebugVariable {
+  std::string name, value;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    if (name.empty()) {
+      throw_runtime("SetDebugVariable: variable name is empty");
+    } else if (value.empty()) {
+      throw_runtime("SetDebugVariable: variable value is empty");
+    }
+    return ResultBool{api.SetDebugVariable(name.c_str(), value.c_str())};
+  }
+};
+
 struct CommandSetVariable {
   std::string name, value;
   Result invoke(tesseract::TessBaseAPI &api) const {
+    if (name.empty()) {
+      throw_runtime("SetVariable: variable name is empty");
+    } else if (value.empty()) {
+      throw_runtime("SetVariable: variable value is empty");
+    }
     return ResultBool{api.SetVariable(name.c_str(), value.c_str())};
   }
 };
@@ -206,9 +578,9 @@ struct CommandGetIntVariable {
   Result invoke(tesseract::TessBaseAPI &api) const {
     int value;
     if (!api.GetIntVariable(name.c_str(), &value)) {
-      throw_runtime(
-          "tesseract::TessBaseAPI::GetIntVariable: Variable '{}' was not found",
-          name.c_str());
+      throw_runtime("tesseract::TessBaseAPI::GetIntVariable: Variable '{}' "
+                    "was not found",
+                    name.c_str());
     }
 
     return ResultInt{value};
@@ -253,12 +625,6 @@ struct CommandGetStringVariable {
     return ResultString{value};
   }
 };
-
-// struct CommandPrintVariables {
-//   Result invoke(tesseract::TessBaseAPI &api) const {
-// api.PrintVariables(FILE *fp);
-//   }
-// };
 
 struct CommandSetImage {
   std::vector<uint8_t> bytes;
@@ -345,6 +711,90 @@ struct CommandDetectOrientationScript {
 struct CommandMeanTextConf {
   Result invoke(tesseract::TessBaseAPI &api) const {
     return ResultInt{api.MeanTextConf()};
+  }
+};
+
+struct CommandGetPAGEText {
+  int page_number;
+  std::shared_ptr<MonitorContext> monitor_context;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    MonitorHandle handle{monitor_context};
+    auto *monitor = monitor_context ? &handle.monitor : nullptr;
+    char *page_text = api.GetPAGEText(monitor, page_number);
+    if (!page_text) {
+      throw_runtime("GetPAGEText returned null");
+    }
+    std::string text = std::string{page_text};
+
+    delete[] page_text;
+    return ResultString(text);
+  }
+};
+
+struct CommandGetLSTMBoxText {
+  int page_number;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    char *lstm_box_text = api.GetLSTMBoxText(page_number);
+    if (!lstm_box_text) {
+      throw_runtime("GetLSTMBoxText returned null");
+    }
+    std::string text = std::string{lstm_box_text};
+
+    delete[] lstm_box_text;
+    return ResultString(text);
+  }
+};
+
+struct CommandGetBoxText {
+  int page_number;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    char *box_text = api.GetBoxText(page_number);
+    if (!box_text) {
+      throw_runtime("GetBoxText returned null");
+    }
+    std::string text = std::string{box_text};
+
+    delete[] box_text;
+    return ResultString(text);
+  }
+};
+
+struct CommandGetWordStrBoxText {
+  int page_number;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    char *word_str_box_text = api.GetWordStrBoxText(page_number);
+    if (!word_str_box_text) {
+      throw_runtime("GetWordStrBoxText returned null");
+    }
+    std::string text = std::string{word_str_box_text};
+
+    delete[] word_str_box_text;
+    return ResultString(text);
+  }
+};
+
+struct CommandGetOSDText {
+  int page_number;
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    char *ost_text = api.GetOsdText(page_number);
+    if (!ost_text) {
+      throw_runtime("GetOSDText returned null");
+    }
+    std::string text = std::string{ost_text};
+
+    delete[] ost_text;
+    return ResultString(text);
+  }
+};
+
+struct CommandAllWordConfidences {
+  Result invoke(tesseract::TessBaseAPI &api) const {
+    int *all_word_confidences = api.AllWordConfidences();
+
+    std::vector<int> confidences =
+
+        delete[] all_word_confidences;
+    return ResultArray{};
   }
 };
 
@@ -474,10 +924,11 @@ using Command = std::variant<
     CommandGetDoubleVariable, CommandGetStringVariable, CommandSetPageMode,
     CommandSetRectangle, CommandSetSourceResolution, CommandSetImage,
     CommandRecognize, CommandDetectOrientationScript, CommandMeanTextConf,
-    CommandGetUTF8Text, CommandGetHOCRText, CommandGetTSVText,
-    CommandGetUNLVText, CommandGetALTOText, CommandGetInitLanguages,
-    CommandGetLoadedLanguages, CommandGetAvailableLanguages, CommandClear,
-    CommandEnd>;
+    CommandBeginProcessPages, CommandAddProcessPage, CommandFinishProcessPages,
+    CommandAbortProcessPages, CommandGetUTF8Text, CommandGetHOCRText,
+    CommandGetTSVText, CommandGetUNLVText, CommandGetALTOText,
+    CommandGetInitLanguages, CommandGetLoadedLanguages,
+    CommandGetAvailableLanguages, CommandClear, CommandEnd>;
 
 struct Job {
   Command command;

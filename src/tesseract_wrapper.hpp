@@ -46,6 +46,10 @@ private:
   Napi::Value GetStringVariable(const Napi::CallbackInfo &info);
   Napi::Value PrintVariables(const Napi::CallbackInfo &info);
   Napi::Value SetImage(const Napi::CallbackInfo &info);
+  Napi::Value BeginProcessPages(const Napi::CallbackInfo &info);
+  Napi::Value AddProcessPage(const Napi::CallbackInfo &info);
+  Napi::Value FinishProcessPages(const Napi::CallbackInfo &info);
+  Napi::Value AbortProcessPages(const Napi::CallbackInfo &info);
   Napi::Value SetPageMode(const Napi::CallbackInfo &info);
   Napi::Value SetRectangle(const Napi::CallbackInfo &info);
   Napi::Value SetSourceResolution(const Napi::CallbackInfo &info);

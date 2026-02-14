@@ -19,6 +19,7 @@
 #include <exception>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <stop_token>
 #include <thread>
@@ -69,6 +70,7 @@ void WorkerThread::MakeCallback(std::shared_ptr<Job> *p_job) {
 }
 
 void WorkerThread::Run(std::stop_token token) {
+  std::optional<ProcessPagesSession> process_pages_session;
 
   auto drain_queue = [&](std::vector<std::shared_ptr<Job>> &pending_jobs) {
     while (!_request_queue.empty()) {
@@ -113,7 +115,15 @@ void WorkerThread::Run(std::stop_token token) {
 
     try {
       job->result = std::visit(
-          [&](const auto &command) -> Result { return command.invoke(_api); },
+          [&](const auto &command) -> Result {
+            if constexpr (requires {
+                            command.invoke(_api, process_pages_session);
+                          }) {
+              return command.invoke(_api, process_pages_session);
+            } else {
+              return command.invoke(_api);
+            }
+          },
           job->command);
     } catch (const std::exception &error) {
       job->error = error.what();
