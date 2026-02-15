@@ -20,20 +20,86 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <leptonica/allheaders.h>
 #include <string>
 #include <tesseract/publictypes.h>
 
 Napi::FunctionReference TesseractWrapper::constructor;
 
+namespace {
+
+Napi::Value RejectWithError(Napi::Env env, Napi::Error error, const char *code,
+                            const std::string &message, const char *method) {
+  error.Set("code", Napi::String::New(env, code));
+  error.Set("method", Napi::String::New(env, method));
+
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+  deferred.Reject(error.Value());
+  return deferred.Promise();
+}
+
+Napi::Value RejectError(Napi::Env env, const std::string &message,
+                        const char *method) {
+  return RejectWithError(env, Napi::Error::New(env, message),
+                         "ERR_TESSERACT_RUNTIME", message, method);
+}
+
+Napi::Value RejectTypeError(Napi::Env env, const std::string &message,
+                            const char *method) {
+  return RejectWithError(env, Napi::TypeError::New(env, message),
+                         "ERR_INVALID_ARGUMENT", message, method);
+}
+
+Napi::Value RejectRangeError(Napi::Env env, const std::string &message,
+                             const char *method) {
+  return RejectWithError(env, Napi::RangeError::New(env, message),
+                         "ERR_OUT_OF_RANGE", message, method);
+}
+
+bool HasArg(const Napi::CallbackInfo &info, size_t index) {
+  return info.Length() > index && !info[index].IsUndefined();
+}
+
+} // namespace
+
 Napi::Object TesseractWrapper::InitAddon(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(
       env, "Tesseract",
       {
+          InstanceMethod("version", &TesseractWrapper::Version),
+          InstanceMethod("isInitialized", &TesseractWrapper::IsInitialized),
+          InstanceMethod("setInputName", &TesseractWrapper::SetInputName),
+          InstanceMethod("getInputName", &TesseractWrapper::GetInputName),
+          InstanceMethod("setInputImage", &TesseractWrapper::SetInputImage),
+          InstanceMethod("getInputImage", &TesseractWrapper::GetInputImage),
+          InstanceMethod("getSourceYResolution",
+                         &TesseractWrapper::GetSourceYResolution),
+          InstanceMethod("getDataPath", &TesseractWrapper::GetDataPath),
+          InstanceMethod("setOutputName", &TesseractWrapper::SetOutputName),
+          InstanceMethod("clearPersistentCache",
+                         &TesseractWrapper::ClearPersistentCache),
+          InstanceMethod("clearAdaptiveClassifier",
+                         &TesseractWrapper::ClearAdaptiveClassifier),
+          InstanceMethod("getThresholdedImage",
+                         &TesseractWrapper::GetThresholdedImage),
+          InstanceMethod("getThresholdedImageScaleFactor",
+                         &TesseractWrapper::GetThresholdedImageScaleFactor),
           InstanceMethod("init", &TesseractWrapper::Init),
           InstanceMethod("initForAnalysePage",
                          &TesseractWrapper::InitForAnalysePage),
-          InstanceMethod("analysePage", &TesseractWrapper::AnalysePage),
+          InstanceMethod("analyseLayout", &TesseractWrapper::AnalyseLayout),
+          InstanceMethod("beginProcessPages",
+                         &TesseractWrapper::BeginProcessPages),
+          InstanceMethod("addProcessPage", &TesseractWrapper::AddProcessPage),
+          InstanceMethod("finishProcessPages",
+                         &TesseractWrapper::FinishProcessPages),
+          InstanceMethod("abortProcessPages",
+                         &TesseractWrapper::AbortProcessPages),
+          InstanceMethod("getProcessPagesStatus",
+                         &TesseractWrapper::GetProcessPagesStatus),
+          InstanceMethod("setDebugVariable",
+                         &TesseractWrapper::SetDebugVariable),
           InstanceMethod("setVariable", &TesseractWrapper::SetVariable),
           InstanceMethod("getIntVariable", &TesseractWrapper::GetIntVariable),
           InstanceMethod("getBoolVariable", &TesseractWrapper::GetBoolVariable),
@@ -41,9 +107,9 @@ Napi::Object TesseractWrapper::InitAddon(Napi::Env env, Napi::Object exports) {
                          &TesseractWrapper::GetDoubleVariable),
           InstanceMethod("getStringVariable",
                          &TesseractWrapper::GetStringVariable),
+          InstanceMethod("setImage", &TesseractWrapper::SetImage),
           // InstanceMethod("printVariables",
           // &TesseractWrapper::PrintVariables),
-          InstanceMethod("setImage", &TesseractWrapper::SetImage),
           InstanceMethod("setPageMode", &TesseractWrapper::SetPageMode),
           InstanceMethod("setRectangle", &TesseractWrapper::SetRectangle),
           InstanceMethod("setSourceResolution",
@@ -52,6 +118,14 @@ Napi::Object TesseractWrapper::InitAddon(Napi::Env env, Napi::Object exports) {
           InstanceMethod("detectOrientationScript",
                          &TesseractWrapper::DetectOrientationScript),
           InstanceMethod("meanTextConf", &TesseractWrapper::MeanTextConf),
+          InstanceMethod("allWordConfidences",
+                         &TesseractWrapper::AllWordConfidences),
+          InstanceMethod("getPAGEText", &TesseractWrapper::GetPAGEText),
+          InstanceMethod("getLSTMBoxText", &TesseractWrapper::GetLSTMBoxText),
+          InstanceMethod("getBoxText", &TesseractWrapper::GetBoxText),
+          InstanceMethod("getWordStrBoxText",
+                         &TesseractWrapper::GetWordStrBoxText),
+          InstanceMethod("getOSDText", &TesseractWrapper::getOSDText),
           InstanceMethod("getUTF8Text", &TesseractWrapper::GetUTF8Text),
           InstanceMethod("getHOCRText", &TesseractWrapper::GetHOCRText),
           InstanceMethod("getTSVText", &TesseractWrapper::GetTSVText),
@@ -79,16 +153,185 @@ TesseractWrapper::TesseractWrapper(const Napi::CallbackInfo &info)
 
 TesseractWrapper::~TesseractWrapper() {}
 
+Napi::Value TesseractWrapper::Version(const Napi::CallbackInfo &info) {
+  return _worker_thread.Enqueue(CommandVersion{});
+}
+
+Napi::Value TesseractWrapper::IsInitialized(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env, "isInitialized(): expected no arguments",
+                           "isInitialized");
+  }
+
+  return _worker_thread.Enqueue(CommandIsInitialized{});
+}
+
+Napi::Value TesseractWrapper::SetInputName(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 1) {
+    return RejectTypeError(
+        env, "setInputName(inputName?): expected at most 1 argument",
+        "setInputName");
+  }
+
+  CommandSetInputName command{};
+  if (HasArg(info, 0)) {
+    if (!info[0].IsString()) {
+      return RejectTypeError(
+          env, "setInputName(inputName?): inputName must be a string",
+          "setInputName");
+    }
+
+    command.input_name = info[0].As<Napi::String>().Utf8Value();
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value TesseractWrapper::GetInputName(const Napi::CallbackInfo &info) {
+  return _worker_thread.Enqueue(CommandGetInputName{});
+}
+
+Napi::Value TesseractWrapper::SetInputImage(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 1) {
+    return RejectTypeError(
+        env, "setInputImage(buffer?): expected at most 1 argument",
+        "setInputImage");
+  }
+
+  CommandSetInputImage command{};
+  if (HasArg(info, 0)) {
+    if (!info[0].IsBuffer()) {
+      return RejectTypeError(env,
+                             "setInputImage(buffer?): buffer must be a Buffer",
+                             "setInputImage");
+    }
+
+    Napi::Buffer<uint8_t> image_buffer = info[0].As<Napi::Buffer<uint8_t>>();
+    const uint8_t *data = image_buffer.Data();
+    const size_t length = image_buffer.Length();
+
+    if (length == 0) {
+      return RejectTypeError(env, "setInputImage(buffer?): buffer is empty",
+                             "setInputImage");
+    }
+
+    command.bytes.assign(data, data + length);
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value TesseractWrapper::GetInputImage(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env, "getInputImage(): expected no arguments",
+                           "getInputImage");
+  }
+
+  return _worker_thread.Enqueue(CommandGetInputImage{});
+}
+
+Napi::Value
+TesseractWrapper::GetSourceYResolution(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env, "getSourceYResolution(): expected no arguments",
+                           "getSourceYResolution");
+  }
+
+  return _worker_thread.Enqueue(CommandGetSourceYResolution{});
+}
+
+Napi::Value TesseractWrapper::GetDataPath(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env, "getDataPath(): expected no arguments",
+                           "getDataPath");
+  }
+
+  return _worker_thread.Enqueue(CommandGetDataPath{});
+}
+
+Napi::Value TesseractWrapper::SetOutputName(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandSetOutputName command{};
+
+  if (info.Length() != 1 || !info[0].IsString()) {
+    return RejectTypeError(
+        env, "setOutputName(outputName): outputName must be a string",
+        "setOutputName");
+  }
+
+  command.output_name = info[0].As<Napi::String>().Utf8Value();
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value
+TesseractWrapper::ClearPersistentCache(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env, "clearPersistentCache(): expected no arguments",
+                           "clearPersistentCache");
+  }
+
+  return _worker_thread.Enqueue(CommandClearPersistentCache{});
+}
+
+Napi::Value
+TesseractWrapper::ClearAdaptiveClassifier(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env,
+                           "clearAdaptiveClassifier(): expected no arguments",
+                           "clearAdaptiveClassifier");
+  }
+
+  return _worker_thread.Enqueue(CommandClearAdaptiveClassifier{});
+}
+
+Napi::Value
+TesseractWrapper::GetThresholdedImage(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env, "getThresholdedImage(): expected no arguments",
+                           "getThresholdedImage");
+  }
+
+  return _worker_thread.Enqueue(CommandGetThresholdedImage{});
+}
+
+Napi::Value TesseractWrapper::GetThresholdedImageScaleFactor(
+    const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(
+        env, "getThresholdedImageScaleFactor(): expected no arguments",
+        "getThresholdedImageScaleFactor");
+  }
+
+  return _worker_thread.Enqueue(CommandGetThresholdedImageScaleFactor{});
+}
+
 Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
 
   if (info.Length() != 1 || !info[0].IsObject()) {
-    deferred.Reject(
-        Napi::TypeError::New(
-            env, "Expected required argument at index 0 to be of type object")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(
+        env, "init(options): required argument at index 0 must be an object",
+        "init");
   }
 
   auto options = info[0].As<Napi::Object>();
@@ -97,10 +340,8 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   const Napi::Value dataPathOption = options.Get("dataPath");
   if (!dataPathOption.IsUndefined()) {
     if (!dataPathOption.IsString()) {
-      deferred.Reject(
-          Napi::TypeError::New(env, "Option 'dataPath' must be a string")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env, "init(options): options.dataPath must be a string", "init");
     }
 
     Napi::String dataPath = dataPathOption.As<Napi::String>();
@@ -110,10 +351,9 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   const Napi::Value langsOption = options.Get("langs");
   if (!langsOption.IsUndefined()) {
     if (!langsOption.IsArray()) {
-      deferred.Reject(
-          Napi::TypeError::New(env, "Option 'langs' must be a array of strings")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env, "init(options): options.langs must be an array of strings",
+          "init");
     }
 
     Napi::Array languages = langsOption.As<Napi::Array>();
@@ -133,18 +373,15 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   const Napi::Value engineModeOption = options.Get("oem");
   if (!engineModeOption.IsUndefined()) {
     if (!engineModeOption.IsNumber()) {
-      deferred.Reject(
-          Napi::TypeError::New(env, "Option 'oem' must be of type number")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(env, "init(options): options.oem must be a number",
+                             "init");
     }
     tesseract::OcrEngineMode oem = static_cast<tesseract::OcrEngineMode>(
         engineModeOption.As<Napi::Number>().Int32Value());
 
     if (oem < 0 || oem >= tesseract::OEM_COUNT) {
-      deferred.Reject(
-          Napi::TypeError::New(env, "Unsupported OCR Engine Mode").Value());
-      return deferred.Promise();
+      return RejectRangeError(
+          env, "init(options): options.oem is out of supported range", "init");
     }
 
     command.oem = oem;
@@ -154,11 +391,9 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
       options.Get("setOnlyNonDebugParams");
   if (!set_only_non_debug_params.IsUndefined()) {
     if (!set_only_non_debug_params.IsBoolean()) {
-      deferred.Reject(
-          Napi::TypeError::New(
-              env, "Option 'setOnlyNonDebugParams' must be of type boolean")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env, "init(options): options.setOnlyNonDebugParams must be a boolean",
+          "init");
     }
 
     command.set_only_non_debug_params =
@@ -168,10 +403,9 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
   const Napi::Value v = options.Get("configs");
   if (!v.IsUndefined()) {
     if (!v.IsArray()) {
-      deferred.Reject(Napi::TypeError::New(
-                          env, "Option 'configs' must be an array of strings")
-                          .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env, "init(options): options.configs must be an array of strings",
+          "init");
     }
 
     Napi::Array arr = v.As<Napi::Array>();
@@ -183,10 +417,9 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
     for (uint32_t i = 0; i < len; ++i) {
       Napi::Value item = arr.Get(i);
       if (!item.IsString()) {
-        deferred.Reject(Napi::TypeError::New(
-                            env, "Option 'configs' must contain only strings")
-                            .Value());
-        return deferred.Promise();
+        return RejectTypeError(
+            env, "init(options): options.configs must contain only strings",
+            "init");
       }
       command.configs_storage.emplace_back(item.As<Napi::String>().Utf8Value());
     }
@@ -201,10 +434,8 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
 
   if (!varsOption.IsUndefined()) {
     if (!varsOption.IsObject()) {
-      deferred.Reject(
-          Napi::TypeError::New(env, "Options 'vars' must be of type object")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env, "init(options): options.vars must be an object", "init");
     }
 
     // Napi::Array a = vars_vec.As<Napi::Array>();
@@ -219,10 +450,9 @@ Napi::Value TesseractWrapper::Init(const Napi::CallbackInfo &info) {
     for (uint32_t i = 0; i < length; ++i) {
       Napi::Value variable_value = vars.Get(variable_names.Get(i));
       if (!variable_names.Get(i).IsString() || !variable_value.IsString()) {
-        deferred.Reject(
-            Napi::TypeError::New(env, "'vars' must contain only strings")
-                .Value());
-        return deferred.Promise();
+        return RejectTypeError(
+            env, "init(options): options.vars must contain only strings",
+            "init");
       }
       command.vars_vec.emplace_back(
           variable_names.Get(i).As<Napi::String>().Utf8Value());
@@ -239,22 +469,22 @@ TesseractWrapper::InitForAnalysePage(const Napi::CallbackInfo &info) {
   return _worker_thread.Enqueue(CommandInitForAnalysePage{});
 }
 
-Napi::Value TesseractWrapper::AnalysePage(const Napi::CallbackInfo &info) {
+Napi::Value TesseractWrapper::AnalyseLayout(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandAnalyseLayout command{};
 
   if (info.Length() > 1) {
-    deferred.Reject(Napi::Error::New(env, "Too many arguments").Value());
-    return deferred.Promise();
+    return RejectTypeError(
+        env, "analyseLayout(mergeSimilarWords?): expected at most 1 argument",
+        "analyseLayout");
   }
 
-  if (!info[0].IsUndefined()) {
+  if (HasArg(info, 0)) {
     if (!info[0].IsBoolean()) {
-      deferred.Reject(
-          Napi::Error::New(env, "Expected argument to be of type boolean")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(env,
+                             "analyseLayout(mergeSimilarWords?): "
+                             "mergeSimilarWords must be a boolean",
+                             "analyseLayout");
     }
 
     command.merge_similar_words = info[0].As<Napi::Boolean>().Value();
@@ -263,37 +493,151 @@ Napi::Value TesseractWrapper::AnalysePage(const Napi::CallbackInfo &info) {
   return _worker_thread.Enqueue(command);
 }
 
-Napi::Value TesseractWrapper::SetPageMode(const Napi::CallbackInfo &info) {
+Napi::Value
+TesseractWrapper::BeginProcessPages(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
-  CommandSetPageMode command{};
+  CommandBeginProcessPages command{};
 
-  if (info.Length() > 1) {
-    deferred.Reject(
-        Napi::Error::New(env, "Expected only one parameter").Value());
-    return deferred.Promise();
+  if (info.Length() != 1 || !info[0].IsObject()) {
+    return RejectTypeError(
+        env, "beginProcessPages(options): options must be an object",
+        "beginProcessPages");
   }
 
-  if (!info[0].IsUndefined()) {
-    if (!info[0].IsNumber()) {
-      deferred.Reject(
-          Napi::Error::New(
-              env, "Expected page segmentation mode to be of type number")
-              .Value());
-      return deferred.Promise();
+  Napi::Object options = info[0].As<Napi::Object>();
+
+  Napi::Value output_base = options.Get("outputBase");
+  if (!output_base.IsUndefined()) {
+    if (!output_base.IsString()) {
+      return RejectTypeError(
+          env,
+          "beginProcessPages(options): options.outputBase must be a string",
+          "beginProcessPages");
     }
-
-    tesseract::PageSegMode psm = static_cast<tesseract::PageSegMode>(
-        info[0].As<Napi::Number>().Int32Value());
-
-    if (psm < 0 || psm >= tesseract::PageSegMode::PSM_COUNT) {
-      deferred.Reject(
-          Napi::Error::New(env, "Page Segmentation Mode out of range").Value());
-      return deferred.Promise();
-    }
-
-    command.psm = psm;
+    command.output_base = output_base.As<Napi::String>().Utf8Value();
   }
+
+  Napi::Value title = options.Get("title");
+  if (title.IsUndefined() || !title.IsString()) {
+    return RejectTypeError(env,
+                           "beginProcessPages(options): options.title is "
+                           "required and must be a string",
+                           "beginProcessPages");
+  }
+  command.title = title.As<Napi::String>().Utf8Value();
+
+  Napi::Value timeout = options.Get("timeout");
+  if (!timeout.IsUndefined()) {
+    if (!timeout.IsNumber()) {
+      return RejectTypeError(
+          env, "beginProcessPages(options): options.timeout must be a number",
+          "beginProcessPages");
+    }
+    command.timeout_millisec = timeout.As<Napi::Number>().Int32Value();
+  }
+
+  Napi::Value textonly = options.Get("textonly");
+  if (!textonly.IsUndefined()) {
+    if (!textonly.IsBoolean()) {
+      return RejectTypeError(
+          env, "beginProcessPages(options): options.textonly must be a boolean",
+          "beginProcessPages");
+    }
+    command.textonly = textonly.As<Napi::Boolean>().Value();
+  }
+
+  return _worker_thread.Enqueue(std::move(command));
+}
+
+Napi::Value TesseractWrapper::AddProcessPage(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandAddProcessPage command{};
+
+  if (info.Length() < 1 || info.Length() > 2) {
+    return RejectTypeError(
+        env, "addProcessPage(buffer, filename?): expected 1 or 2 arguments",
+        "addProcessPage");
+  }
+
+  if (!info[0].IsBuffer()) {
+    return RejectTypeError(
+        env, "addProcessPage(buffer, filename?): buffer must be a Buffer",
+        "addProcessPage");
+  }
+
+  Napi::Buffer<uint8_t> page_buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  const size_t length = page_buffer.Length();
+  if (length == 0) {
+    return RejectTypeError(env,
+                           "addProcessPage(buffer, filename?): buffer is empty",
+                           "addProcessPage");
+  }
+
+  if (HasArg(info, 1)) {
+    if (!info[1].IsString()) {
+      return RejectTypeError(
+          env, "addProcessPage(buffer, filename?): filename must be a string",
+          "addProcessPage");
+    }
+    command.filename = info[1].As<Napi::String>().Utf8Value();
+  }
+
+  command.page.bytes.resize(length);
+  std::memcpy(command.page.bytes.data(), page_buffer.Data(), length);
+
+  return _worker_thread.Enqueue(std::move(command));
+}
+
+Napi::Value
+TesseractWrapper::FinishProcessPages(const Napi::CallbackInfo &info) {
+  return _worker_thread.Enqueue(CommandFinishProcessPages{});
+}
+
+Napi::Value
+TesseractWrapper::AbortProcessPages(const Napi::CallbackInfo &info) {
+  CommandAbortProcessPages command{};
+  if (info.Length() > 0 && info[0].IsString()) {
+    command.reason = info[0].As<Napi::String>().Utf8Value();
+  }
+  return _worker_thread.Enqueue(std::move(command));
+}
+
+Napi::Value
+TesseractWrapper::GetProcessPagesStatus(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() > 0) {
+    return RejectTypeError(env,
+                           "getProcessPagesStatus(): expected no arguments",
+                           "getProcessPagesStatus");
+  }
+
+  return _worker_thread.Enqueue(CommandGetProcessPagesStatus{});
+}
+
+Napi::Value TesseractWrapper::SetDebugVariable(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandSetDebugVariable command{};
+
+  if (info.Length() != 2) {
+    return RejectTypeError(
+        env, "setDebugVariable(name, value): expected exactly 2 arguments",
+        "setDebugVariable");
+  }
+
+  if (!info[0].IsString()) {
+    return RejectTypeError(
+        env, "setDebugVariable(name, value): name must be a string",
+        "setDebugVariable");
+  }
+  if (!info[1].IsString()) {
+    return RejectTypeError(
+        env, "setDebugVariable(name, value): value must be a string",
+        "setDebugVariable");
+  }
+
+  command.name = info[0].As<Napi::String>().Utf8Value();
+  command.value = info[1].As<Napi::String>().Utf8Value();
 
   return _worker_thread.Enqueue(command);
 }
@@ -302,23 +646,19 @@ Napi::Value TesseractWrapper::SetVariable(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
   CommandSetVariable command{};
 
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
-
   if (info.Length() != 2) {
-    deferred.Reject(Napi::Error::New(env, "Expected two arguments").Value());
-    return deferred.Promise();
+    return RejectTypeError(
+        env, "setVariable(name, value): expected exactly 2 arguments",
+        "setVariable");
   }
 
   if (!info[0].IsString()) {
-    deferred.Reject(
-        Napi::Error::New(env, "Expected variable name to be a string").Value());
-    return deferred.Promise();
+    return RejectTypeError(
+        env, "setVariable(name, value): name must be a string", "setVariable");
   }
   if (!info[1].IsString()) {
-    return deferred.Reject(
-               Napi::Error::New(env, "Variable value must be a string")
-                   .Value()),
-           deferred.Promise();
+    return RejectTypeError(
+        env, "setVariable(name, value): value must be a string", "setVariable");
   }
 
   const std::string variable_name = info[0].As<Napi::String>().Utf8Value();
@@ -332,22 +672,17 @@ Napi::Value TesseractWrapper::SetVariable(const Napi::CallbackInfo &info) {
 
 Napi::Value TesseractWrapper::GetIntVariable(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandGetIntVariable command{};
 
   if (info.Length() != 1) {
-    deferred.Reject(
-        Napi::Error::New(env,
-                         "GetIntVariable(name): exactly 1 argument required")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(env,
+                           "getIntVariable(name): expected exactly 1 argument",
+                           "getIntVariable");
   }
 
   if (!info[0].IsString()) {
-    deferred.Reject(
-        Napi::Error::New(env, "GetIntVariable(name): name must be a string")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(env, "getIntVariable(name): name must be a string",
+                           "getIntVariable");
   }
 
   std::string name = info[0].As<Napi::String>().Utf8Value();
@@ -358,22 +693,17 @@ Napi::Value TesseractWrapper::GetIntVariable(const Napi::CallbackInfo &info) {
 
 Napi::Value TesseractWrapper::GetBoolVariable(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandGetBoolVariable command{};
 
   if (info.Length() != 1) {
-    deferred.Reject(
-        Napi::Error::New(env,
-                         "GetIntVariable(name): exactly 1 argument required")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(env,
+                           "getBoolVariable(name): expected exactly 1 argument",
+                           "getBoolVariable");
   }
 
   if (!info[0].IsString()) {
-    deferred.Reject(
-        Napi::Error::New(env, "GetIntVariable(name): name must be a string")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(env, "getBoolVariable(name): name must be a string",
+                           "getBoolVariable");
   }
 
   std::string name = info[0].As<Napi::String>().Utf8Value();
@@ -385,22 +715,18 @@ Napi::Value TesseractWrapper::GetBoolVariable(const Napi::CallbackInfo &info) {
 Napi::Value
 TesseractWrapper::GetDoubleVariable(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandGetDoubleVariable command{};
 
   if (info.Length() != 1) {
-    deferred.Reject(
-        Napi::Error::New(env,
-                         "GetIntVariable(name): exactly 1 argument required")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(
+        env, "getDoubleVariable(name): expected exactly 1 argument",
+        "getDoubleVariable");
   }
 
   if (!info[0].IsString()) {
-    deferred.Reject(
-        Napi::Error::New(env, "GetIntVariable(name): name must be a string")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(env,
+                           "getDoubleVariable(name): name must be a string",
+                           "getDoubleVariable");
   }
 
   std::string name = info[0].As<Napi::String>().Utf8Value();
@@ -412,22 +738,18 @@ TesseractWrapper::GetDoubleVariable(const Napi::CallbackInfo &info) {
 Napi::Value
 TesseractWrapper::GetStringVariable(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandGetStringVariable command{};
 
   if (info.Length() != 1) {
-    deferred.Reject(
-        Napi::Error::New(env,
-                         "GetIntVariable(name): exactly 1 argument required")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(
+        env, "getStringVariable(name): expected exactly 1 argument",
+        "getStringVariable");
   }
 
   if (!info[0].IsString()) {
-    deferred.Reject(
-        Napi::Error::New(env, "GetIntVariable(name): name must be a string")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(env,
+                           "getStringVariable(name): name must be a string",
+                           "getStringVariable");
   }
 
   std::string name = info[0].As<Napi::String>().Utf8Value();
@@ -438,13 +760,11 @@ TesseractWrapper::GetStringVariable(const Napi::CallbackInfo &info) {
 
 Napi::Value TesseractWrapper::SetImage(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandSetImage command{};
 
   if (info.Length() < 1 || !info[0].IsBuffer()) {
-    deferred.Reject(
-        Napi::Error::New(env, "SetImage(buffer): buffer required").Value());
-    return deferred.Promise();
+    return RejectTypeError(env, "setImage(buffer): buffer argument is required",
+                           "setImage");
   }
 
   Napi::Buffer<uint8_t> image_buffer = info[0].As<Napi::Buffer<uint8_t>>();
@@ -452,16 +772,14 @@ Napi::Value TesseractWrapper::SetImage(const Napi::CallbackInfo &info) {
   const size_t length = image_buffer.Length();
 
   if (length == 0) {
-    deferred.Reject(Napi::Error::New(env, "SetImage: buffer is empty").Value());
-    return deferred.Promise();
+    return RejectTypeError(env, "setImage(buffer): buffer is empty",
+                           "setImage");
   }
 
   Pix *pix = pixReadMem(data, length);
   if (!pix) {
-    deferred.Reject(
-        Napi::Error::New(env, "SetImage: failed to decode image buffer")
-            .Value());
-    return deferred.Promise();
+    return RejectError(env, "setImage(buffer): failed to decode image buffer",
+                       "setImage");
   }
 
   Pix *normalized = pix;
@@ -499,9 +817,8 @@ Napi::Value TesseractWrapper::SetImage(const Napi::CallbackInfo &info) {
       pixDestroy(&normalized);
     }
     pixDestroy(&pix);
-    deferred.Reject(
-        Napi::Error::New(env, "SetImage: invalid decoded image data").Value());
-    return deferred.Promise();
+    return RejectError(env, "setImage(buffer): invalid decoded image data",
+                       "setImage");
   }
 
   command.width = width;
@@ -519,16 +836,43 @@ Napi::Value TesseractWrapper::SetImage(const Napi::CallbackInfo &info) {
   return _worker_thread.Enqueue(command);
 }
 
+Napi::Value TesseractWrapper::SetPageMode(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandSetPageMode command{};
+
+  if (info.Length() > 1) {
+    return RejectTypeError(
+        env, "setPageMode(psm?): expected at most 1 argument", "setPageMode");
+  }
+
+  if (HasArg(info, 0)) {
+    if (!info[0].IsNumber()) {
+      return RejectTypeError(env, "setPageMode(psm?): psm must be a number",
+                             "setPageMode");
+    }
+
+    tesseract::PageSegMode psm = static_cast<tesseract::PageSegMode>(
+        info[0].As<Napi::Number>().Int32Value());
+
+    if (psm < 0 || psm >= tesseract::PageSegMode::PSM_COUNT) {
+      return RejectRangeError(env, "setPageMode(psm?): psm is out of range",
+                              "setPageMode");
+    }
+
+    command.psm = psm;
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
 Napi::Value TesseractWrapper::SetRectangle(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandSetRectangle command{};
 
   if (info.Length() != 1 || !info[0].IsObject()) {
-    deferred.Reject(
-        Napi::Error::New(env, "Expected first argument to be a object")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(
+        env, "setRectangle(rectangle): rectangle must be an object",
+        "setRectangle");
   }
 
   Napi::Object rectangle = info[0].As<Napi::Object>();
@@ -540,11 +884,10 @@ Napi::Value TesseractWrapper::SetRectangle(const Napi::CallbackInfo &info) {
 
   if (!maybe_left.IsNumber() || !maybe_top.IsNumber() ||
       !maybe_width.IsNumber() || !maybe_height.IsNumber()) {
-    deferred.Reject(
-        Napi::Error::New(env,
-                         "SetRectangle: missing property in rectangle object")
-            .Value());
-    return deferred.Promise();
+    return RejectTypeError(env,
+                           "setRectangle(rectangle): "
+                           "rectangle.left/top/width/height must be numbers",
+                           "setRectangle");
   }
 
   int32_t left = maybe_left.As<Napi::Number>().Int32Value();
@@ -563,19 +906,18 @@ Napi::Value TesseractWrapper::SetRectangle(const Napi::CallbackInfo &info) {
 Napi::Value
 TesseractWrapper::SetSourceResolution(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandSetSourceResolution command{};
 
-  if (info.Length() > 1) {
-    deferred.Reject(
-        Napi::Error::New(env, "Expected only one parameter").Value());
-    return deferred.Promise();
+  if (info.Length() != 1) {
+    return RejectTypeError(
+        env, "setSourceResolution(ppi): expected exactly 1 argument",
+        "setSourceResolution");
   }
 
   if (!info[0].IsNumber()) {
-    deferred.Reject(
-        Napi::Error::New(env, "Expected ppi to be of type number").Value());
-    return deferred.Promise();
+    return RejectTypeError(env,
+                           "setSourceResolution(ppi): ppi must be a number",
+                           "setSourceResolution");
   }
 
   int ppi = info[0].As<Napi::Number>().Int32Value();
@@ -587,16 +929,14 @@ TesseractWrapper::SetSourceResolution(const Napi::CallbackInfo &info) {
 
 Napi::Value TesseractWrapper::Recognize(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandRecognize command{};
 
-  if (!info[0].IsUndefined()) {
+  if (HasArg(info, 0)) {
     if (!info[0].IsFunction()) {
-      deferred.Reject(
-          Napi::Error::New(env,
-                           "Expected progress callback to be of type function")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env,
+          "recognize(progressCallback?): progressCallback must be a function",
+          "recognize");
     }
 
     Napi::Function progress_callback = info[0].As<Napi::Function>();
@@ -619,22 +959,22 @@ Napi::Value TesseractWrapper::MeanTextConf(const Napi::CallbackInfo &info) {
   return _worker_thread.Enqueue(CommandMeanTextConf{});
 }
 
-Napi::Value TesseractWrapper::GetUTF8Text(const Napi::CallbackInfo &info) {
-  return _worker_thread.Enqueue(CommandGetUTF8Text{});
+Napi::Value
+TesseractWrapper::AllWordConfidences(const Napi::CallbackInfo &info) {
+  return _worker_thread.Enqueue(CommandAllWordConfidences{});
 }
 
-Napi::Value TesseractWrapper::GetHOCRText(const Napi::CallbackInfo &info) {
+Napi::Value TesseractWrapper::GetPAGEText(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
-  CommandGetHOCRText command{};
+  CommandGetPAGEText command{};
+  command.page_number = 0;
 
-  if (!info[0].IsUndefined()) {
+  if (HasArg(info, 0)) {
     if (!info[0].IsFunction()) {
-      deferred.Reject(
-          Napi::Error::New(env,
-                           "Expected progress callback to be of type function")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(env,
+                             "getPAGEText(progressCallback?, pageNumber?): "
+                             "progressCallback must be a function",
+                             "getPAGEText");
     }
 
     Napi::Function progress_callback = info[0].As<Napi::Function>();
@@ -645,12 +985,119 @@ Napi::Value TesseractWrapper::GetHOCRText(const Napi::CallbackInfo &info) {
         std::make_shared<MonitorContext>(std::move(progress_tsfn));
   }
 
-  if (!info[1].IsUndefined()) {
+  if (HasArg(info, 1)) {
     if (!info[1].IsNumber()) {
-      deferred.Reject(
-          Napi::Error::New(env, "Expected page_number to be of type number")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(env,
+                             "getPAGEText(progressCallback?, pageNumber?): "
+                             "pageNumber must be a number",
+                             "getPAGEText");
+    }
+
+    command.page_number = info[1].As<Napi::Number>().Int32Value();
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value TesseractWrapper::GetLSTMBoxText(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandGetLSTMBoxText command{};
+  command.page_number = 0;
+
+  if (HasArg(info, 0)) {
+    if (!info[0].IsNumber()) {
+      return RejectTypeError(
+          env, "getLSTMBoxText(pageNumber?): pageNumber must be a number",
+          "getLSTMBoxText");
+    }
+    command.page_number = info[0].As<Napi::Number>().Int32Value();
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value TesseractWrapper::GetBoxText(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandGetBoxText command{};
+  command.page_number = 0;
+
+  if (HasArg(info, 0)) {
+    if (!info[0].IsNumber()) {
+      return RejectTypeError(
+          env, "getBoxText(pageNumber?): pageNumber must be a number",
+          "getBoxText");
+    }
+    command.page_number = info[0].As<Napi::Number>().Int32Value();
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value
+TesseractWrapper::GetWordStrBoxText(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandGetWordStrBoxText command{};
+  command.page_number = 0;
+
+  if (HasArg(info, 0)) {
+    if (!info[0].IsNumber()) {
+      return RejectTypeError(
+          env, "getWordStrBoxText(pageNumber?): pageNumber must be a number",
+          "getWordStrBoxText");
+    }
+    command.page_number = info[0].As<Napi::Number>().Int32Value();
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value TesseractWrapper::getOSDText(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandGetOSDText command{};
+  command.page_number = 0;
+
+  if (HasArg(info, 0)) {
+    if (!info[0].IsNumber()) {
+      return RejectTypeError(
+          env, "getOSDText(pageNumber?): pageNumber must be a number",
+          "getOSDText");
+    }
+    command.page_number = info[0].As<Napi::Number>().Int32Value();
+  }
+
+  return _worker_thread.Enqueue(command);
+}
+
+Napi::Value TesseractWrapper::GetUTF8Text(const Napi::CallbackInfo &info) {
+  return _worker_thread.Enqueue(CommandGetUTF8Text{});
+}
+
+Napi::Value TesseractWrapper::GetHOCRText(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  CommandGetHOCRText command{};
+
+  if (HasArg(info, 0)) {
+    if (!info[0].IsFunction()) {
+      return RejectTypeError(env,
+                             "getHOCRText(progressCallback?, pageNumber?): "
+                             "progressCallback must be a function",
+                             "getHOCRText");
+    }
+
+    Napi::Function progress_callback = info[0].As<Napi::Function>();
+    Napi::ThreadSafeFunction progress_tsfn = Napi::ThreadSafeFunction::New(
+        env, progress_callback, "tesseract_progress_callback", 0, 1);
+
+    command.monitor_context =
+        std::make_shared<MonitorContext>(std::move(progress_tsfn));
+  }
+
+  if (HasArg(info, 1)) {
+    if (!info[1].IsNumber()) {
+      return RejectTypeError(env,
+                             "getHOCRText(progressCallback?, pageNumber?): "
+                             "pageNumber must be a number",
+                             "getHOCRText");
     }
 
     int32_t page_number = info[1].As<Napi::Number>().Int32Value();
@@ -662,15 +1109,13 @@ Napi::Value TesseractWrapper::GetHOCRText(const Napi::CallbackInfo &info) {
 
 Napi::Value TesseractWrapper::GetTSVText(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandGetTSVText command{};
 
-  if (!info[0].IsUndefined()) {
+  if (HasArg(info, 0)) {
     if (!info[0].IsNumber()) {
-      deferred.Reject(
-          Napi::Error::New(env, "Expected page_number to be of type number")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env, "getTSVText(pageNumber?): pageNumber must be a number",
+          "getTSVText");
     }
 
     int32_t page_number = info[0].As<Napi::Number>().Int32Value();
@@ -686,15 +1131,13 @@ Napi::Value TesseractWrapper::GetUNLVText(const Napi::CallbackInfo &info) {
 
 Napi::Value TesseractWrapper::GetALTOText(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
   CommandGetALTOText command{};
 
-  if (!info[0].IsUndefined()) {
+  if (HasArg(info, 0)) {
     if (!info[0].IsNumber()) {
-      deferred.Reject(
-          Napi::Error::New(env, "Expected page_number to be of type number")
-              .Value());
-      return deferred.Promise();
+      return RejectTypeError(
+          env, "getALTOText(pageNumber?): pageNumber must be a number",
+          "getALTOText");
     }
 
     int32_t page_number = info[0].As<Napi::Number>().Int32Value();

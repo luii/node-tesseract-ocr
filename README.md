@@ -17,7 +17,6 @@ Native C++ addon for Node.js that exposes Tesseract OCR (`libtesseract-dev`) to 
   - [Types](#types)
   - [Tesseract API](#tesseract-api)
 - [License](#license)
-- [Special Thanks](#special-thanks)
 
 ## Features
 
@@ -250,6 +249,18 @@ Full list of page segmentation modes from Tesseract.
 | `bottom`   | `number` | No       | n/a     | Bottom coordinate of current element bbox. |
 | `left`     | `number` | No       | n/a     | Left coordinate of current element bbox.   |
 
+#### `TesseractProcessPagesStatus`
+
+| Field             | Type      | Optional | Default | Description                                           |
+| ----------------- | --------- | -------- | ------- | ----------------------------------------------------- |
+| `active`          | `boolean` | No       | n/a     | Whether a multipage session is currently active.      |
+| `healthy`         | `boolean` | No       | n/a     | Whether the renderer is healthy.                      |
+| `processedPages`  | `number`  | No       | n/a     | Number of pages already processed in this session.    |
+| `nextPageIndex`   | `number`  | No       | n/a     | Zero-based index that will be used for the next page. |
+| `outputBase`      | `string`  | No       | n/a     | Effective output base used by the PDF renderer.       |
+| `timeoutMillisec` | `number`  | No       | n/a     | Timeout per page in milliseconds (`0` = unlimited).   |
+| `textonly`        | `boolean` | No       | n/a     | Whether text-only PDF mode is enabled.                |
+
 #### `DetectOrientationScriptResult`
 
 | Field                   | Type     | Optional | Default | Description                                        |
@@ -269,13 +280,92 @@ new Tesseract();
 
 Creates a new Tesseract instance.
 
+#### Initialization Requirements
+
+Call `init(...)` once before using OCR/engine-dependent methods.
+
+Methods that do **not** require `init(...)`:
+
+- `version()`
+- `isInitialized()`
+- `setInputName(...)`
+- `getInputName()`
+- `abortProcessPages()`
+- `getProcessPagesStatus()`
+- `document.abort()`
+- `document.status()`
+- `init(...)`
+- `end()`
+
+Methods that **require** `init(...)`:
+
+- `setInputImage(...)`
+- `getInputImage()`
+- `getSourceYResolution()`
+- `getDataPath()`
+- `setOutputName(...)`
+- `clearPersistentCache()`
+- `clearAdaptiveClassifier()`
+- `setImage(...)`
+- `getThresholdedImage()`
+- `getThresholdedImageScaleFactor()`
+- `setPageMode(...)`
+- `setRectangle(...)`
+- `setSourceResolution(...)`
+- `recognize(...)`
+- `detectOrientationScript()`
+- `meanTextConf()`
+- `allWordConfidences()`
+- `getPAGEText(...)`
+- `getLSTMBoxText(...)`
+- `getBoxText(...)`
+- `getWordStrBoxText(...)`
+- `getOSDText(...)`
+- `getUTF8Text()`
+- `getHOCRText(...)`
+- `getTSVText(...)`
+- `getUNLVText()`
+- `getALTOText(...)`
+- `getInitLanguages()`
+- `getLoadedLanguages()`
+- `getAvailableLanguages()`
+- `setDebugVariable(...)`
+- `setVariable(...)`
+- `getIntVariable(...)`
+- `getBoolVariable(...)`
+- `getDoubleVariable(...)`
+- `getStringVariable(...)`
+- `clear()`
+- `beginProcessPages(...)`
+- `addProcessPage(...)`
+- `finishProcessPages()`
+- `document.begin(...)`
+- `document.addPage(...)`
+- `document.finish()`
+
+#### version
+
+Returns the currently loaded libtesseract version string.
+
+```ts
+version(): Promise<string>
+```
+
+#### isInitialized
+
+Returns whether `init(...)` has already completed successfully and has not been reset via `end()`.
+
+```ts
+isInitialized(): Promise<boolean>
+```
+
 #### init
 
-Initializes Tesseract with language, engine mode, configs, and variables.
+Initializes the OCR engine with language, OEM, configs, and variables.
 
-| Name    | Type                                            | Optional | Default | Description             |
-| ------- | ----------------------------------------------- | -------- | ------- | ----------------------- |
-| options | [`TesseractInitOptions`](#tesseractinitoptions) | No       | n/a     | Initialization options. |
+| Name      | Type                                            | Optional | Default | Description             |
+| --------- | ----------------------------------------------- | -------- | ------- | ----------------------- |
+| `options` | [`TesseractInitOptions`](#tesseractinitoptions) | No       | n/a     | Initialization options. |
 
 ```ts
 init(options: TesseractInitOptions): Promise<void>
@@ -283,116 +373,155 @@ init(options: TesseractInitOptions): Promise<void>
 
 #### initForAnalysePage
 
-Initializes for layout analysis only.
+Initializes the engine in analysis-only mode.
 
 ```ts
 initForAnalysePage(): Promise<void>
 ```
 
-#### analysePage
+#### analyseLayout
 
-Runs the layout analysis.
+Runs page layout analysis on the current image.
 
-| Name              | Type    | Optional | Default | Description                     |
-| ----------------- | ------- | -------- | ------- | ------------------------------- |
-| mergeSimilarWords | boolean | No       | n/a     | Whether to merge similar words. |
+| Name                | Type      | Optional | Default | Description                                 |
+| ------------------- | --------- | -------- | ------- | ------------------------------------------- |
+| `mergeSimilarWords` | `boolean` | No       | n/a     | Merge similar words during layout analysis. |
 
 ```ts
-analysePage(mergeSimilarWords: boolean): Promise<void>
+analyseLayout(mergeSimilarWords: boolean): Promise<void>
 ```
 
-#### setPageMode
+#### setInputName
 
-Sets the page segmentation mode.
+Sets the source/input name used by renderer/training APIs.
 
-| Name | Type                                             | Optional | Default | Description             |
-| ---- | ------------------------------------------------ | -------- | ------- | ----------------------- |
-| psm  | [`PageSegmentationMode`](#pagesegmentationmodes) | No       | n/a     | Page segmentation mode. |
+| Name        | Type     | Optional | Default | Description                                |
+| ----------- | -------- | -------- | ------- | ------------------------------------------ |
+| `inputName` | `string` | No       | n/a     | Input name used by renderer/training APIs. |
 
 ```ts
-setPageMode(psm: PageSegmentationMode): Promise<void>
+setInputName(inputName: string): Promise<void>
 ```
 
-#### setVariable
+#### getInputName
 
-Sets a Tesseract variable. Returns `false` if the lookup failed.
-
-| Name  | Type                                                           | Optional | Default | Description     |
-| ----- | -------------------------------------------------------------- | -------- | ------- | --------------- |
-| name  | keyof SetVariableConfigVariables                               | No       | n/a     | Variable name.  |
-| value | SetVariableConfigVariables\[keyof SetVariableConfigVariables\] | No       | n/a     | Variable value. |
+Returns the current input name from engine state.
 
 ```ts
-setVariable(name: keyof SetVariableConfigVariables, value: SetVariableConfigVariables[keyof SetVariableConfigVariables]): Promise<boolean>
+getInputName(): Promise<string>
 ```
 
-#### getIntVariable
+#### setInputImage
 
-Reads an integer variable from Tesseract.
+Sets the encoded source image buffer.
 
-| Name | Type                             | Optional | Default | Description    |
-| ---- | -------------------------------- | -------- | ------- | -------------- |
-| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
+| Name     | Type     | Optional | Default | Description                  |
+| -------- | -------- | -------- | ------- | ---------------------------- |
+| `buffer` | `Buffer` | No       | n/a     | Encoded source image buffer. |
 
 ```ts
-getIntVariable(name: keyof SetVariableConfigVariables): Promise<number>
+setInputImage(buffer: Buffer): Promise<void>
 ```
 
-#### getBoolVariable
+#### getInputImage
 
-Reads a boolean variable from Tesseract. Returns `0` or `1`.
-
-| Name | Type                             | Optional | Default | Description    |
-| ---- | -------------------------------- | -------- | ------- | -------------- |
-| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
+Returns the current input image bytes.
 
 ```ts
-getBoolVariable(name: keyof SetVariableConfigVariables): Promise<number>
+getInputImage(): Promise<Buffer>
 ```
 
-#### getDoubleVariable
+#### getSourceYResolution
 
-Reads a double variable from Tesseract.
-
-| Name | Type                             | Optional | Default | Description    |
-| ---- | -------------------------------- | -------- | ------- | -------------- |
-| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
+Returns source image Y resolution (DPI).
 
 ```ts
-getDoubleVariable(name: keyof SetVariableConfigVariables): Promise<number>
+getSourceYResolution(): Promise<number>
 ```
 
-#### getStringVariable
+#### getDataPath
 
-Reads a string variable from Tesseract.
-
-| Name | Type                             | Optional | Default | Description    |
-| ---- | -------------------------------- | -------- | ------- | -------------- |
-| name | keyof SetVariableConfigVariables | No       | n/a     | Variable name. |
+Returns the active tessdata path from the engine.
 
 ```ts
-getStringVariable(name: keyof SetVariableConfigVariables): Promise<string>
+getDataPath(): Promise<string>
+```
+
+#### setOutputName
+
+Sets the output base name for renderer-based outputs.
+
+| Name         | Type     | Optional | Default | Description                            |
+| ------------ | -------- | -------- | ------- | -------------------------------------- |
+| `outputName` | `string` | No       | n/a     | Output base name for renderer outputs. |
+
+```ts
+setOutputName(outputName: string): Promise<void>
+```
+
+#### clearPersistentCache
+
+Clears global library-level caches (for example dictionaries).
+
+```ts
+clearPersistentCache(): Promise<void>
+```
+
+#### clearAdaptiveClassifier
+
+Cleans adaptive classifier state between pages/documents.
+
+```ts
+clearAdaptiveClassifier(): Promise<void>
 ```
 
 #### setImage
 
-Sets the image from a Buffer.
+Sets the image used by OCR recognition.
 
-| Name   | Type   | Optional | Default | Description |
-| ------ | ------ | -------- | ------- | ----------- |
-| buffer | Buffer | No       | n/a     | Image data. |
+| Name     | Type     | Optional | Default | Description              |
+| -------- | -------- | -------- | ------- | ------------------------ |
+| `buffer` | `Buffer` | No       | n/a     | Image data used for OCR. |
 
 ```ts
 setImage(buffer: Buffer): Promise<void>
 ```
 
+#### getThresholdedImage
+
+Returns thresholded image bytes from Tesseract internals.
+
+```ts
+getThresholdedImage(): Promise<Buffer>
+```
+
+#### getThresholdedImageScaleFactor
+
+Returns scale factor for thresholded/component images.
+
+```ts
+getThresholdedImageScaleFactor(): Promise<number>
+```
+
+#### setPageMode
+
+Sets the page segmentation mode (PSM).
+
+| Name  | Type                                            | Optional | Default | Description             |
+| ----- | ----------------------------------------------- | -------- | ------- | ----------------------- |
+| `psm` | [`PageSegmentationMode`](#pagesegmentationmode) | No       | n/a     | Page segmentation mode. |
+
+```ts
+setPageMode(psm: PageSegmentationMode): Promise<void>
+```
+
 #### setRectangle
 
-Sets the image region using coordinates and size.
+Restricts recognition to the given rectangle.
 
-| Name    | Type                                                            | Optional | Default | Description        |
-| ------- | --------------------------------------------------------------- | -------- | ------- | ------------------ |
-| options | [`TesseractSetRectangleOptions`](#tesseractsetrectangleoptions) | No       | n/a     | Region definition. |
+| Name      | Type                                                            | Optional | Default | Description        |
+| --------- | --------------------------------------------------------------- | -------- | ------- | ------------------ |
+| `options` | [`TesseractSetRectangleOptions`](#tesseractsetrectangleoptions) | No       | n/a     | Region definition. |
 
 ```ts
 setRectangle(options: TesseractSetRectangleOptions): Promise<void>
@@ -402,29 +531,268 @@ setRectangle(options: TesseractSetRectangleOptions): Promise<void>
 
 Sets the source resolution in PPI.
 
-| Name | Type   | Optional | Default | Description      |
-| ---- | ------ | -------- | ------- | ---------------- |
-| ppi  | number | No       | n/a     | Pixels per inch. |
+| Name  | Type     | Optional | Default | Description               |
+| ----- | -------- | -------- | ------- | ------------------------- |
+| `ppi` | `number` | No       | n/a     | Source resolution in PPI. |
 
 ```ts
 setSourceResolution(ppi: number): Promise<void>
 ```
 
-#### recognize
+#### document
 
-Starts OCR and calls the callback with progress info.
-
-| Name             | Type                                                          | Optional | Default | Description        |
-| ---------------- | ------------------------------------------------------------- | -------- | ------- | ------------------ |
-| progressCallback | (info: [`ProgressChangedInfo`](#progresschangedinfo)) => void | No       | n/a     | Progress callback. |
+Facade for multipage PDF/document processing lifecycle.
 
 ```ts
-recognize(progressCallback: (info: ProgressChangedInfo) => void): Promise<void>
+document: {
+  begin(options: TesseractBeginProcessPagesOptions): Promise<void>;
+  addPage(buffer: Buffer, filename?: string): Promise<void>;
+  finish(): Promise<string>;
+  abort(): Promise<void>;
+  status(): Promise<TesseractProcessPagesStatus>;
+}
+```
+
+#### document.begin
+
+Starts a multipage processing session.
+
+| Name      | Type                                | Optional | Default | Description                 |
+| --------- | ----------------------------------- | -------- | ------- | --------------------------- |
+| `options` | `TesseractBeginProcessPagesOptions` | No       | n/a     | Multipage renderer options. |
+
+```ts
+document.begin(options: TesseractBeginProcessPagesOptions): Promise<void>
+```
+
+#### document.addPage
+
+Adds an encoded page to the active session.
+
+| Name       | Type     | Optional | Default     | Description                                                                                                                                                                                                                                                                                                                                         |
+| ---------- | -------- | -------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `buffer`   | `Buffer` | No       | n/a         | Encoded page image buffer.                                                                                                                                                                                                                                                                                                                          |
+| `filename` | `string` | Yes      | `undefined` | Optional source filename/path passed to Tesseract `ProcessPage` for this page. Tesseract/Leptonica may open this file internally and use it as the source image for parts of PDF rendering. If output pages look wrong (for example inverted or visually corrupted), pass a real image path here to force a stable source image path for that page. |
+
+```ts
+document.addPage(buffer: Buffer, filename?: string): Promise<void>
+```
+
+#### document.finish
+
+Finalizes the active session and returns output PDF path.
+
+```ts
+document.finish(): Promise<string>
+```
+
+#### document.abort
+
+Aborts and resets the active multipage session.
+
+```ts
+document.abort(): Promise<void>
+```
+
+#### document.status
+
+Returns the current multipage session status (active flag, page counters, and effective renderer settings).
+
+```ts
+document.status(): Promise<TesseractProcessPagesStatus>
+```
+
+#### getProcessPagesStatus
+
+Returns the current multipage session status from the instance API.
+
+```ts
+getProcessPagesStatus(): Promise<TesseractProcessPagesStatus>
+```
+
+#### setDebugVariable
+
+Sets a debug configuration variable.
+
+| Name    | Type                                                           | Optional | Default | Description     |
+| ------- | -------------------------------------------------------------- | -------- | ------- | --------------- |
+| `name`  | `keyof SetVariableConfigVariables`                             | No       | n/a     | Variable name.  |
+| `value` | `SetVariableConfigVariables[keyof SetVariableConfigVariables]` | No       | n/a     | Variable value. |
+
+```ts
+setDebugVariable(
+  name: keyof SetVariableConfigVariables,
+  value: SetVariableConfigVariables[keyof SetVariableConfigVariables],
+): Promise<boolean>
+```
+
+#### setVariable
+
+Sets a regular configuration variable.
+
+| Name    | Type                                                           | Optional | Default | Description     |
+| ------- | -------------------------------------------------------------- | -------- | ------- | --------------- |
+| `name`  | `keyof SetVariableConfigVariables`                             | No       | n/a     | Variable name.  |
+| `value` | `SetVariableConfigVariables[keyof SetVariableConfigVariables]` | No       | n/a     | Variable value. |
+
+```ts
+setVariable(
+  name: keyof SetVariableConfigVariables,
+  value: SetVariableConfigVariables[keyof SetVariableConfigVariables],
+): Promise<boolean>
+```
+
+#### getIntVariable
+
+Reads a configuration variable as integer.
+
+| Name   | Type                               | Optional | Default | Description    |
+| ------ | ---------------------------------- | -------- | ------- | -------------- |
+| `name` | `keyof SetVariableConfigVariables` | No       | n/a     | Variable name. |
+
+```ts
+getIntVariable(name: keyof SetVariableConfigVariables): Promise<number>
+```
+
+#### getBoolVariable
+
+Reads a configuration variable as boolean (`0`/`1`).
+
+| Name   | Type                               | Optional | Default | Description    |
+| ------ | ---------------------------------- | -------- | ------- | -------------- |
+| `name` | `keyof SetVariableConfigVariables` | No       | n/a     | Variable name. |
+
+```ts
+getBoolVariable(name: keyof SetVariableConfigVariables): Promise<number>
+```
+
+#### getDoubleVariable
+
+Reads a configuration variable as double.
+
+| Name   | Type                               | Optional | Default | Description    |
+| ------ | ---------------------------------- | -------- | ------- | -------------- |
+| `name` | `keyof SetVariableConfigVariables` | No       | n/a     | Variable name. |
+
+```ts
+getDoubleVariable(name: keyof SetVariableConfigVariables): Promise<number>
+```
+
+#### getStringVariable
+
+Reads a configuration variable as string.
+
+| Name   | Type                               | Optional | Default | Description    |
+| ------ | ---------------------------------- | -------- | ------- | -------------- |
+| `name` | `keyof SetVariableConfigVariables` | No       | n/a     | Variable name. |
+
+```ts
+getStringVariable(name: keyof SetVariableConfigVariables): Promise<string>
+```
+
+#### recognize
+
+Runs OCR recognition (optionally with progress callback).
+
+| Name               | Type                                  | Optional | Default     | Description            |
+| ------------------ | ------------------------------------- | -------- | ----------- | ---------------------- |
+| `progressCallback` | `(info: ProgressChangedInfo) => void` | Yes      | `undefined` | OCR progress callback. |
+
+```ts
+recognize(progressCallback?: (info: ProgressChangedInfo) => void): Promise<void>
+```
+
+#### detectOrientationScript
+
+Detects orientation and script with confidence values.
+
+```ts
+detectOrientationScript(): Promise<DetectOrientationScriptResult>
+```
+
+#### meanTextConf
+
+Returns mean text confidence.
+
+```ts
+meanTextConf(): Promise<number>
+```
+
+#### allWordConfidences
+
+Returns all word confidences for current recognition result.
+
+```ts
+allWordConfidences(): Promise<number[]>
+```
+
+#### getPAGEText
+
+Returns PAGE XML output.
+
+| Name               | Type                                  | Optional | Default     | Description                        |
+| ------------------ | ------------------------------------- | -------- | ----------- | ---------------------------------- |
+| `progressCallback` | `(info: ProgressChangedInfo) => void` | Yes      | `undefined` | PAGE generation progress callback. |
+| `pageNumber`       | `number`                              | Yes      | `undefined` | 0-based page number.               |
+
+```ts
+getPAGEText(
+  progressCallback?: (info: ProgressChangedInfo) => void,
+  pageNumber?: number,
+): Promise<string>
+```
+
+#### getLSTMBoxText
+
+Returns LSTM box output.
+
+| Name         | Type     | Optional | Default     | Description          |
+| ------------ | -------- | -------- | ----------- | -------------------- |
+| `pageNumber` | `number` | Yes      | `undefined` | 0-based page number. |
+
+```ts
+getLSTMBoxText(pageNumber?: number): Promise<string>
+```
+
+#### getBoxText
+
+Returns classic box output.
+
+| Name         | Type     | Optional | Default     | Description          |
+| ------------ | -------- | -------- | ----------- | -------------------- |
+| `pageNumber` | `number` | Yes      | `undefined` | 0-based page number. |
+
+```ts
+getBoxText(pageNumber?: number): Promise<string>
+```
+
+#### getWordStrBoxText
+
+Returns WordStr box output.
+
+| Name         | Type     | Optional | Default     | Description          |
+| ------------ | -------- | -------- | ----------- | -------------------- |
+| `pageNumber` | `number` | Yes      | `undefined` | 0-based page number. |
+
+```ts
+getWordStrBoxText(pageNumber?: number): Promise<string>
+```
+
+#### getOSDText
+
+Returns OSD text output.
+
+| Name         | Type     | Optional | Default     | Description          |
+| ------------ | -------- | -------- | ----------- | -------------------- |
+| `pageNumber` | `number` | Yes      | `undefined` | 0-based page number. |
+
+```ts
+getOSDText(pageNumber?: number): Promise<string>
 ```
 
 #### getUTF8Text
 
-Returns recognized text as UTF-8.
+Returns recognized UTF-8 text.
 
 ```ts
 getUTF8Text(): Promise<string>
@@ -432,12 +800,12 @@ getUTF8Text(): Promise<string>
 
 #### getHOCRText
 
-Returns HOCR output. Optional progress callback and page number.
+Returns hOCR output.
 
-| Name             | Type                                                          | Optional | Default   | Description            |
-| ---------------- | ------------------------------------------------------------- | -------- | --------- | ---------------------- |
-| progressCallback | (info: [`ProgressChangedInfo`](#progresschangedinfo)) => void | Yes      | undefined | Progress callback.     |
-| pageNumber       | number                                                        | Yes      | undefined | Page number (0-based). |
+| Name               | Type                                  | Optional | Default     | Description                        |
+| ------------------ | ------------------------------------- | -------- | ----------- | ---------------------------------- |
+| `progressCallback` | `(info: ProgressChangedInfo) => void` | Yes      | `undefined` | hOCR generation progress callback. |
+| `pageNumber`       | `number`                              | Yes      | `undefined` | 0-based page number.               |
 
 ```ts
 getHOCRText(
@@ -450,8 +818,12 @@ getHOCRText(
 
 Returns TSV output.
 
+| Name         | Type     | Optional | Default     | Description          |
+| ------------ | -------- | -------- | ----------- | -------------------- |
+| `pageNumber` | `number` | Yes      | `undefined` | 0-based page number. |
+
 ```ts
-getTSVText(): Promise<string>
+getTSVText(pageNumber?: number): Promise<string>
 ```
 
 #### getUNLVText
@@ -464,39 +836,19 @@ getUNLVText(): Promise<string>
 
 #### getALTOText
 
-Returns ALTO output. Optional progress callback and page number.
+Returns ALTO XML output.
 
-| Name             | Type                                                          | Optional | Default   | Description            |
-| ---------------- | ------------------------------------------------------------- | -------- | --------- | ---------------------- |
-| progressCallback | (info: [`ProgressChangedInfo`](#progresschangedinfo)) => void | Yes      | undefined | Progress callback.     |
-| pageNumber       | number                                                        | Yes      | undefined | Page number (0-based). |
-
-```ts
-getALTOText(
-  progressCallback?: (info: ProgressChangedInfo) => void,
-  pageNumber?: number,
-): Promise<string>
-```
-
-#### detectOrientationScript
-
-Detects orientation and script with confidences. Returns [`DetectOrientationScriptResult`](#detectorientationscriptresult).
+| Name         | Type     | Optional | Default     | Description          |
+| ------------ | -------- | -------- | ----------- | -------------------- |
+| `pageNumber` | `number` | Yes      | `undefined` | 0-based page number. |
 
 ```ts
-detectOrientationScript(): Promise<DetectOrientationScriptResult>
-```
-
-#### meanTextConf
-
-Mean text confidence (0-100).
-
-```ts
-meanTextConf(): Promise<number>
+getALTOText(pageNumber?: number): Promise<string>
 ```
 
 #### getInitLanguages
 
-Returns [`Language`](#availablelanguages) in raw Tesseract format (e.g. "deu+eng").
+Returns languages used during initialization (for example `deu+eng`).
 
 ```ts
 getInitLanguages(): Promise<string>
@@ -504,7 +856,7 @@ getInitLanguages(): Promise<string>
 
 #### getLoadedLanguages
 
-Returns [`Language[]`](#availablelanguages) in raw Tesseract format.
+Returns languages currently loaded in the engine.
 
 ```ts
 getLoadedLanguages(): Promise<Language[]>
@@ -512,7 +864,7 @@ getLoadedLanguages(): Promise<Language[]>
 
 #### getAvailableLanguages
 
-Returns [`Language[]`](#availablelanguages) in raw Tesseract format.
+Returns languages available from tessdata.
 
 ```ts
 getAvailableLanguages(): Promise<Language[]>
@@ -520,7 +872,7 @@ getAvailableLanguages(): Promise<Language[]>
 
 #### clear
 
-Clears internal state.
+Clears internal recognition state/results.
 
 ```ts
 clear(): Promise<void>
@@ -528,7 +880,7 @@ clear(): Promise<void>
 
 #### end
 
-Ends the instance.
+Releases native resources and ends the instance.
 
 ```ts
 end(): Promise<void>
@@ -537,7 +889,3 @@ end(): Promise<void>
 ## License
 
 Apache-2.0. See [`LICENSE.md`](/LICENSE.md) for full terms.
-
-## Special Thanks
-
-- **Stunt3000**
