@@ -736,22 +736,19 @@ export type SetVariableConfigVariables = Omit<
 
 export type SetConfigurationVariableNames = keyof SetVariableConfigVariables;
 export type SetNumberConfigurationVariableNames = {
-  [Name in SetConfigurationVariableNames]: SetVariableConfigVariables[Name] extends
-    `${number}`
+  [Name in SetConfigurationVariableNames]: SetVariableConfigVariables[Name] extends `${number}`
     ? SetVariableConfigVariables[Name] extends `${0 | 1}`
       ? never
       : Name
     : never;
 }[SetConfigurationVariableNames];
 export type SetBoolConfigurationVariableNames = {
-  [Name in SetConfigurationVariableNames]: SetVariableConfigVariables[Name] extends
-    `${0 | 1}`
+  [Name in SetConfigurationVariableNames]: SetVariableConfigVariables[Name] extends `${0 | 1}`
     ? Name
     : never;
 }[SetConfigurationVariableNames];
 export type SetStringConfigurationVariableNames = {
-  [Name in SetConfigurationVariableNames]: SetVariableConfigVariables[Name] extends
-    `${number}`
+  [Name in SetConfigurationVariableNames]: SetVariableConfigVariables[Name] extends `${number}`
     ? never
     : Name;
 }[SetConfigurationVariableNames];
@@ -865,6 +862,12 @@ export interface TesseractBeginProcessPagesOptions {
   title: string;
   timeout: number;
   textonly: boolean;
+}
+
+export interface TesseractAddProcessPageOptions {
+  buffer: Buffer<ArrayBuffer>;
+  filename?: string;
+  progressCallback?: (info: ProgressChangedInfo) => void;
 }
 
 export interface TesseractProcessPagesStatus {
@@ -1000,12 +1003,15 @@ export interface TesseractDocumentApi {
   /**
    * Adds one encoded page to the active multipage session.
    * @throws {TesseractRuntimeError} If called before `init(...)`.
-   * @throws {TesseractArgumentError} If `buffer` is not a non-empty Buffer.
-   * @throws {TesseractArgumentError} If `filename` is provided but is not a string.
+   * @param {TesseractAddProcessPageOptions} options Page options.
+   * @throws {TesseractArgumentError} If `options` is missing/invalid.
+   * @throws {TesseractArgumentError} If `options.buffer` is not a non-empty Buffer.
+   * @throws {TesseractArgumentError} If `options.filename` is provided but is not a string.
+   * @throws {TesseractArgumentError} If `options.progressCallback` is provided but is not a function.
    * @throws {TesseractRuntimeError} If no session is active, decode fails, or page processing fails.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
-  addPage(buffer: Buffer<ArrayBuffer>, filename?: string): Promise<void>;
+  addPage(options: TesseractAddProcessPageOptions): Promise<void>;
 
   /**
    * Finalizes the active multipage session and returns output PDF path.
@@ -1174,15 +1180,18 @@ export interface TesseractInstance {
   beginProcessPages(options: TesseractBeginProcessPagesOptions): Promise<void>;
 
   /**
-   * Adds one encoded page to the current multipage session.
+   * Adds one encoded page to the active multipage session.
    * @deprecated use `document.addPage()`
-   * @throws {TesseractArgumentError} If `buffer` is not a non-empty Buffer.
-   * @throws {TesseractArgumentError} If `filename` is provided but is not a string.
+   * @param {TesseractAddProcessPageOptions} options Page options.
+   * @throws {TesseractArgumentError} If `options` is missing/invalid.
+   * @throws {TesseractArgumentError} If `options.buffer` is not a non-empty Buffer.
+   * @throws {TesseractArgumentError} If `options.filename` is provided but is not a string.
+   * @throws {TesseractArgumentError} If `options.progressCallback` is provided but is not a function.
    * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If no session is active, decode fails, or page processing fails.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
-  addProcessPage(buffer: Buffer<ArrayBuffer>, filename?: string): Promise<void>;
+  addProcessPage(options: TesseractAddProcessPageOptions): Promise<void>;
 
   /**
    * Finalizes the current multipage session and returns the output PDF path.

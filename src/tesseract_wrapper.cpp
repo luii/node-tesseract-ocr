@@ -553,33 +553,55 @@ Napi::Value TesseractWrapper::AddProcessPage(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
   CommandAddProcessPage command{};
 
-  if (info.Length() < 1 || info.Length() > 2) {
-    return RejectTypeError(
-        env, "addProcessPage(buffer, filename?): expected 1 or 2 arguments",
-        "addProcessPage");
-  }
-
-  if (!info[0].IsBuffer()) {
-    return RejectTypeError(
-        env, "addProcessPage(buffer, filename?): buffer must be a Buffer",
-        "addProcessPage");
-  }
-
-  Napi::Buffer<uint8_t> page_buffer = info[0].As<Napi::Buffer<uint8_t>>();
-  const size_t length = page_buffer.Length();
-  if (length == 0) {
+  if (info.Length() != 1 || !info[0].IsObject()) {
     return RejectTypeError(env,
-                           "addProcessPage(buffer, filename?): buffer is empty",
+                           "addProcessPage(options): options must be an object",
                            "addProcessPage");
   }
 
-  if (HasArg(info, 1)) {
-    if (!info[1].IsString()) {
+  Napi::Object options = info[0].As<Napi::Object>();
+
+  Napi::Value buffer_value = options.Get("buffer");
+  if (!buffer_value.IsBuffer()) {
+    return RejectTypeError(
+        env, "addProcessPage(options): options.buffer must be a Buffer",
+        "addProcessPage");
+  }
+
+  Napi::Buffer<uint8_t> page_buffer = buffer_value.As<Napi::Buffer<uint8_t>>();
+  const size_t length = page_buffer.Length();
+  if (length == 0) {
+    return RejectTypeError(env,
+                           "addProcessPage(options): options.buffer is empty",
+                           "addProcessPage");
+  }
+
+  Napi::Value filename_value = options.Get("filename");
+  if (!filename_value.IsUndefined() && !filename_value.IsNull()) {
+    if (!filename_value.IsString()) {
       return RejectTypeError(
-          env, "addProcessPage(buffer, filename?): filename must be a string",
+          env, "addProcessPage(options): options.filename must be a string",
           "addProcessPage");
     }
-    command.filename = info[1].As<Napi::String>().Utf8Value();
+    command.filename = filename_value.As<Napi::String>().Utf8Value();
+  }
+
+  Napi::Value progress_callback_value = options.Get("progressCallback");
+  if (!progress_callback_value.IsUndefined() &&
+      !progress_callback_value.IsNull()) {
+    if (!progress_callback_value.IsFunction()) {
+      return RejectTypeError(env,
+                             "addProcessPage(options): "
+                             "options.progressCallback must be a function",
+                             "addProcessPage");
+    }
+
+    Napi::Function progress_callback =
+        progress_callback_value.As<Napi::Function>();
+    Napi::ThreadSafeFunction progress_tsfn = Napi::ThreadSafeFunction::New(
+        env, progress_callback, "tesseract_progress_callback", 0, 1);
+    command.monitor_context =
+        std::make_shared<MonitorContext>(std::move(progress_tsfn));
   }
 
   command.page.bytes.resize(length);

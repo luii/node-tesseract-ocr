@@ -165,9 +165,23 @@ describe("tesseract api validation", () => {
   });
 
   it("rejects addProcessPage with invalid filename type", async () => {
-    // @ts-expect-error - testing runtime validation for invalid type
-    await expect(tesseract.addProcessPage(exampleImage, 123)).rejects.toThrow(
-      "addProcessPage(buffer, filename?): filename must be a string",
+    await expect(
+      // @ts-expect-error - testing runtime validation for invalid type
+      tesseract.addProcessPage({ buffer: exampleImage, filename: 123 }),
+    ).rejects.toThrow(
+      "addProcessPage(options): options.filename must be a string",
+    );
+  });
+
+  it("rejects addProcessPage with non-function progress callback", async () => {
+    await expect(
+      tesseract.addProcessPage({
+        buffer: exampleImage,
+        // @ts-expect-error - testing runtime validation for invalid type
+        progressCallback: 123,
+      }),
+    ).rejects.toThrow(
+      "addProcessPage(options): options.progressCallback must be a function",
     );
   });
 
@@ -207,9 +221,9 @@ describe("tesseract api validation", () => {
 
   it("rejects addProcessPage when called without an active session", async () => {
     await tesseract.init({ langs: [Language.eng] });
-    await expect(tesseract.addProcessPage(exampleImage)).rejects.toThrow(
-      "addProcessPage: called without an active session",
-    );
+    await expect(
+      tesseract.addProcessPage({ buffer: exampleImage }),
+    ).rejects.toThrow("addProcessPage: called without an active session");
   });
 
   it("rejects addProcessPage with undecodable image buffer", async () => {
@@ -221,16 +235,36 @@ describe("tesseract api validation", () => {
       textonly: false,
     });
     await expect(
-      tesseract.addProcessPage(Buffer.from("not-an-image")),
+      tesseract.addProcessPage({ buffer: Buffer.from("not-an-image") }),
     ).rejects.toThrow("addProcessPage: failed to decode image buffer");
     await tesseract.abortProcessPages();
   });
 
+  it("reports progress via addProcessPage callback", async () => {
+    await tesseract.init({ langs: [Language.eng] });
+    await tesseract.beginProcessPages({
+      title: "x",
+      outputBase: path.join(os.tmpdir(), "tess-progress-page2"),
+      timeout: 0,
+      textonly: false,
+    });
+
+    const progressCallbackSpy = vi.fn();
+    await tesseract.addProcessPage({
+      buffer: exampleImage,
+      filename: exampleImagePath,
+      progressCallback: progressCallbackSpy,
+    });
+    expect(progressCallbackSpy).toHaveBeenCalled();
+
+    await tesseract.finishProcessPages();
+  });
+
   it("rejects document.addPage when called without an active session", async () => {
     await tesseract.init({ langs: [Language.eng] });
-    await expect(tesseract.document.addPage(exampleImage)).rejects.toThrow(
-      "addProcessPage: called without an active session",
-    );
+    await expect(
+      tesseract.document.addPage({ buffer: exampleImage }),
+    ).rejects.toThrow("addProcessPage: called without an active session");
   });
 
   it("rejects finishProcessPages when called without an active session", async () => {
@@ -608,7 +642,10 @@ describe("tesseract multipage status api", () => {
       textonly: false,
     });
 
-    await tesseract.document.addPage(exampleImage, exampleImagePath);
+    await tesseract.document.addPage({
+      buffer: exampleImage,
+      filename: exampleImagePath,
+    });
     await expect(tesseract.getProcessPagesStatus()).resolves.toMatchObject({
       active: true,
       processedPages: 1,
