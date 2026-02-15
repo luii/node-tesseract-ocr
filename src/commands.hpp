@@ -1027,24 +1027,24 @@ struct CommandEnd {
 };
 
 using Command = std::variant<
-    CommandVersion, CommandIsInitialized, CommandInit, CommandInitForAnalysePage,
-    CommandSetVariable, CommandSetDebugVariable, CommandGetIntVariable,
-    CommandGetBoolVariable, CommandGetDoubleVariable, CommandGetStringVariable,
-    CommandSetInputName, CommandGetInputName, CommandSetOutputName,
-    CommandGetDataPath, CommandSetInputImage, CommandGetInputImage,
-    CommandSetPageMode, CommandSetRectangle, CommandSetSourceResolution,
-    CommandGetSourceYResolution, CommandSetImage, CommandGetThresholdedImage,
-    CommandGetThresholdedImageScaleFactor, CommandRecognize,
-    CommandAnalyseLayout, CommandDetectOrientationScript, CommandMeanTextConf,
-    CommandAllWordConfidences, CommandGetUTF8Text, CommandGetHOCRText,
-    CommandGetTSVText, CommandGetUNLVText, CommandGetALTOText,
-    CommandGetPAGEText, CommandGetLSTMBoxText, CommandGetBoxText,
-    CommandGetWordStrBoxText, CommandGetOSDText, CommandBeginProcessPages,
-    CommandAddProcessPage, CommandFinishProcessPages, CommandAbortProcessPages,
-    CommandGetProcessPagesStatus, CommandGetInitLanguages,
-    CommandGetLoadedLanguages, CommandGetAvailableLanguages,
-    CommandClearPersistentCache, CommandClearAdaptiveClassifier, CommandClear,
-    CommandEnd>;
+    CommandVersion, CommandIsInitialized, CommandInit,
+    CommandInitForAnalysePage, CommandSetVariable, CommandSetDebugVariable,
+    CommandGetIntVariable, CommandGetBoolVariable, CommandGetDoubleVariable,
+    CommandGetStringVariable, CommandSetInputName, CommandGetInputName,
+    CommandSetOutputName, CommandGetDataPath, CommandSetInputImage,
+    CommandGetInputImage, CommandSetPageMode, CommandSetRectangle,
+    CommandSetSourceResolution, CommandGetSourceYResolution, CommandSetImage,
+    CommandGetThresholdedImage, CommandGetThresholdedImageScaleFactor,
+    CommandRecognize, CommandAnalyseLayout, CommandDetectOrientationScript,
+    CommandMeanTextConf, CommandAllWordConfidences, CommandGetUTF8Text,
+    CommandGetHOCRText, CommandGetTSVText, CommandGetUNLVText,
+    CommandGetALTOText, CommandGetPAGEText, CommandGetLSTMBoxText,
+    CommandGetBoxText, CommandGetWordStrBoxText, CommandGetOSDText,
+    CommandBeginProcessPages, CommandAddProcessPage, CommandFinishProcessPages,
+    CommandAbortProcessPages, CommandGetProcessPagesStatus,
+    CommandGetInitLanguages, CommandGetLoadedLanguages,
+    CommandGetAvailableLanguages, CommandClearPersistentCache,
+    CommandClearAdaptiveClassifier, CommandClear, CommandEnd>;
 
 struct Job {
   Command command;
