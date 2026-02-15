@@ -29,12 +29,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential pkg-config \
-            libtesseract-dev libleptonica-dev
+            libtesseract-dev=5.5.2 libleptonica-dev
       - name: Install system deps (macOS only)
         if: runner.os == 'macOS'
         run: |
           brew update
           brew install tesseract leptonica pkg-config llvm
+      - name: Verify Tesseract version (exactly 5.5.2)
+        shell: bash
+        run: |
+          set -euo pipefail
+          tess_version="$(pkg-config --modversion tesseract || true)"
+          echo "Detected tesseract version: ${tess_version:-<none>}"
+
+          if [[ "$tess_version" != "5.5.2" ]]; then
+            echo "::error::Expected tesseract 5.5.2, but found '${tess_version:-unknown}'."
+            exit 1
+          fi
       - name: Install deps
         run: npm ci --ignore-scripts
       - name: Build addon

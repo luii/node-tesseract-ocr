@@ -30,7 +30,7 @@ Native C++ addon for Node.js that exposes Tesseract OCR (`libtesseract-dev`) to 
 - nodejs
 - node-addon-api
 - c++ build toolchain (e.g. build-essentials)
-- libtesseract-dev
+- libtesseract-dev (exactly `5.5.2`)
 - libleptonica-dev
 - Tesseract training data (eng, deu, ...) or let the library handle that
 
@@ -42,6 +42,15 @@ Native C++ addon for Node.js that exposes Tesseract OCR (`libtesseract-dev`) to 
 sudo apt update
 sudo apt install -y nodejs npm build-essential pkg-config libtesseract-dev libleptonica-dev tesseract-ocr-eng
 ```
+
+Verify the required Tesseract version:
+
+```bash
+pkg-config --modversion tesseract
+# expected: 5.5.2
+```
+
+If your distro ships another version, install/build `tesseract 5.5.2` and ensure `pkg-config` resolves that installation.
 
 ```bash
 git clone git@github.com:luii/node-tesseract-ocr.git
