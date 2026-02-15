@@ -458,6 +458,7 @@ struct CommandBeginProcessPages {
 struct CommandAddProcessPage {
   EncodedImageBuffer page;
   std::string filename;
+  std::shared_ptr<MonitorContext> monitor_context;
   Result invoke(tesseract::TessBaseAPI &api,
                 std::optional<ProcessPagesSession> &session,
                 const std::atomic<bool> &initialized) const {
@@ -523,18 +524,48 @@ struct CommandAddProcessPage {
 
     const char *effective_filename =
         filename.empty() ? nullptr : filename.c_str();
+    api.SetInputName(effective_filename);
+    api.SetImage(pix);
 
-    bool success = api.ProcessPage(
-        pix, session->next_page_index, effective_filename, nullptr,
-        session->timeout_millisec, session->renderer.get());
-    pixDestroy(&pix);
+    bool failed = false;
+    MonitorHandle handle{monitor_context};
+    auto *monitor = monitor_context ? &handle.monitor : nullptr;
 
-    if (!success) {
-      throw_runtime("addProcessPage: ProcessPage failed at page {}",
-                    session->next_page_index);
+    if (session->timeout_millisec > 0) {
+      tesseract::ETEXT_DESC timeout_only_monitor{};
+      if (monitor != nullptr) {
+        monitor->set_deadline_msecs(session->timeout_millisec);
+      } else {
+        timeout_only_monitor.cancel = nullptr;
+        timeout_only_monitor.cancel_this = nullptr;
+        timeout_only_monitor.set_deadline_msecs(session->timeout_millisec);
+        monitor = &timeout_only_monitor;
+      }
+      failed = api.Recognize(monitor) < 0;
+    } else if (api.GetPageSegMode() == tesseract::PSM_OSD_ONLY ||
+               api.GetPageSegMode() == tesseract::PSM_AUTO_ONLY) {
+      tesseract::PageIterator *it = api.AnalyseLayout();
+      if (it == nullptr) {
+        failed = true;
+      } else {
+        delete it;
+      }
+    } else {
+      failed = api.Recognize(monitor) < 0;
     }
 
-    session->next_page_index++;
+    if (session->renderer && !failed) {
+      failed = !session->renderer->AddImage(&api);
+    }
+    pixDestroy(&pix);
+
+    if (!failed) {
+      session->next_page_index++;
+      return ResultVoid{};
+    }
+
+    throw_runtime("addProcessPage: ProcessPage failed at page {}",
+                  session->next_page_index);
     return ResultVoid{};
   }
 };
