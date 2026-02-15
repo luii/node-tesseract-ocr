@@ -35,6 +35,8 @@ std::string CommandName(const Command &command) {
         using T = std::decay_t<decltype(c)>;
         if constexpr (std::is_same_v<T, CommandVersion>)
           return "version";
+        if constexpr (std::is_same_v<T, CommandIsInitialized>)
+          return "isInitialized";
         if constexpr (std::is_same_v<T, CommandInit>)
           return "init";
         if constexpr (std::is_same_v<T, CommandInitForAnalysePage>)
@@ -236,8 +238,17 @@ void WorkerThread::Run(std::stop_token token) {
       job->result = std::visit(
           [&](const auto &command) -> Result {
             if constexpr (requires {
-                            command.invoke(_api, process_pages_session);
+                            command.invoke(_api, process_pages_session,
+                                           _initialized);
                           }) {
+              return command.invoke(_api, process_pages_session, _initialized);
+            } else if constexpr (requires {
+                                   command.invoke(_api, _initialized);
+                                 }) {
+              return command.invoke(_api, _initialized);
+            } else if constexpr (requires {
+                                   command.invoke(_api, process_pages_session);
+                                 }) {
               return command.invoke(_api, process_pages_session);
             } else {
               return command.invoke(_api);

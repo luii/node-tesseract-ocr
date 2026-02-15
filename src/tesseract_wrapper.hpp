@@ -36,6 +36,7 @@ private:
 
   // JS Methods
   Napi::Value Version(const Napi::CallbackInfo &info);
+  Napi::Value IsInitialized(const Napi::CallbackInfo &info);
   Napi::Value SetInputName(const Napi::CallbackInfo &info);
   Napi::Value GetInputName(const Napi::CallbackInfo &info);
   Napi::Value SetInputImage(const Napi::CallbackInfo &info);

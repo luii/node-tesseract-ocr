@@ -1027,6 +1027,13 @@ export interface TesseractInstance {
   version(): Promise<string>;
 
   /**
+   * Returns whether `init(...)` was completed and not reset via `end()`.
+   * @throws {TesseractArgumentError} If called with unexpected arguments.
+   * @throws {TesseractWorkerError} If the worker is closing/stopped.
+   */
+  isInitialized(): Promise<boolean>;
+
+  /**
    * Set the name of the input file.
    * This is used for training/zone files and searchable PDF metadata.
    * @param {string} inputName The name of the input file

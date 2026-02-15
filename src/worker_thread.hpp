@@ -49,6 +49,7 @@ private:
   std::queue<std::shared_ptr<Job>> _request_queue;
 
   tesseract::TessBaseAPI _api;
+  std::atomic<bool> _initialized{false};
 
   std::jthread _worker_thread;
 };

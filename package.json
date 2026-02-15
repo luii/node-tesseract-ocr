@@ -51,7 +51,8 @@
     "example:multi-page": "npm run build:debug && tsc -p tsconfig.examples.json && DOTENV_CONFIG_PATH=.env.local node -r dotenv/config dist/examples/multi-page.js",
     "test:cpp": "cmake-js compile --release && ./build/release/node-tesseract-ocr-tests",
     "test:js": "vitest run",
-    "test:js:watch": "vitest"
+    "test:js:watch": "vitest",
+    "test:types": "tsc -p tsconfig.type-tests.json"
   },
   "files": [
     "dist/**",

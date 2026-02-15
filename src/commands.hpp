@@ -19,11 +19,15 @@
 #include "monitor.hpp"
 #include "utils.hpp"
 #include <allheaders.h>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <iostream>
 #include <memory>
 #include <napi.h>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <tesseract/baseapi.h>
 #include <tesseract/ocrclass.h>
@@ -156,9 +160,23 @@ inline Napi::Value MatchResult(Napi::Env env, const Result &r) {
       r);
 }
 
+inline void RequireInitialized(const std::atomic<bool> &initialized,
+                               const char *method) {
+  if (!initialized.load(std::memory_order_acquire)) {
+    throw_runtime("{}: call init(...) first", method);
+  }
+}
+
 struct CommandVersion {
   Result invoke(tesseract::TessBaseAPI &api) const {
     return ResultString{api.Version()};
+  }
+};
+
+struct CommandIsInitialized {
+  Result invoke(tesseract::TessBaseAPI &,
+                const std::atomic<bool> &initialized) const {
+    return ResultBool{initialized.load(std::memory_order_acquire)};
   }
 };
 
@@ -178,24 +196,40 @@ struct CommandGetInputName {
 
 struct CommandSetInputImage {
   std::vector<uint8_t> bytes;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setInputImage");
     if (bytes.size() == 0) {
       throw_runtime("setInputImage: input buffer is empty");
     }
 
     Pix *pix = pixReadMem(bytes.data(), bytes.size());
+    if (pix == nullptr) {
+      throw_runtime("setInputImage: failed to decode image buffer");
+    }
+
+    // TessBaseAPI::SetInputImage takes ownership of pix.
     api.SetInputImage(pix);
-    pixDestroy(&pix); // do i need that since SetInputImage takes ownership?
     return ResultVoid{};
   }
 };
 
 struct CommandGetInputImage {
-  Result invoke(tesseract::TessBaseAPI &api) const {
-    Pix *pix = api.GetInputImage();
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getInputImage");
+    Pix *source = api.GetInputImage();
 
-    if (pix == nullptr) {
+    std::cout << source << std::endl;
+
+    if (source == nullptr) {
       throw_runtime("getInputImage: TessBaseAPI::GetInputImage returned null");
+    }
+
+    // GetInputImage has no caller-ownership contract; work on a clone.
+    Pix *pix = pixClone(source);
+    if (pix == nullptr) {
+      throw_runtime("getInputImage: failed to clone source image");
     }
 
     l_uint32 *data = pixGetData(pix);
@@ -203,23 +237,27 @@ struct CommandGetInputImage {
     l_int32 h = pixGetHeight(pix);
 
     size_t bytecount = wpl * 4 * h;
-    lept_free(&pix);
-
-    std::vector<uint8_t> buffer(data, data + bytecount);
+    const uint8_t *start = reinterpret_cast<const uint8_t *>(data);
+    std::vector<uint8_t> buffer(start, start + bytecount);
+    pixDestroy(&pix);
 
     return ResultBuffer{buffer};
   }
 };
 
 struct CommandGetSourceYResolution {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getSourceYResolution");
     int source_y_resolution = api.GetSourceYResolution();
     return ResultInt{source_y_resolution};
   }
 };
 
 struct CommandGetDataPath {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getDataPath");
     const char *data_path = api.GetDatapath();
 
     if (data_path == nullptr) {
@@ -232,7 +270,9 @@ struct CommandGetDataPath {
 
 struct CommandSetOutputName {
   std::string output_name;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setOutputName");
     if (output_name.empty()) {
       throw_runtime("setOutputName: output name is empty");
     }
@@ -243,21 +283,27 @@ struct CommandSetOutputName {
 };
 
 struct CommandClearPersistentCache {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "clearPersistentCache");
     api.ClearPersistentCache();
     return ResultVoid{};
   }
 };
 
 struct CommandClearAdaptiveClassifier {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "clearAdaptiveClassifier");
     api.ClearAdaptiveClassifier();
     return ResultVoid{};
   }
 };
 
 struct CommandGetThresholdedImage {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getThresholdedImage");
     Pix *pix = api.GetThresholdedImage();
 
     if (pix == nullptr) {
@@ -270,16 +316,18 @@ struct CommandGetThresholdedImage {
     l_int32 h = pixGetHeight(pix);
 
     size_t bytecount = wpl * 4 * h;
+    const uint8_t *start = reinterpret_cast<const uint8_t *>(data);
+    std::vector<uint8_t> buffer(start, start + bytecount);
     pixDestroy(&pix);
-
-    std::vector<uint8_t> buffer(data, data + bytecount);
 
     return ResultBuffer{buffer};
   }
 };
 
 struct CommandGetThresholdedImageScaleFactor {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getThresholdedImageScaleFactor");
     int scale_factor = api.GetThresholdedImageScaleFactor();
     return ResultInt{scale_factor};
   }
@@ -294,7 +342,8 @@ struct CommandInit {
   std::vector<std::string> vars_values;
   bool set_only_non_debug_params{false};
 
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                std::atomic<bool> &initialized) const {
     const std::vector<std::string> *vv = vars_vec.empty() ? nullptr : &vars_vec;
     const std::vector<std::string> *vval =
         vars_values.empty() ? nullptr : &vars_values;
@@ -315,12 +364,15 @@ struct CommandInit {
       throw_runtime("init: TessBaseAPI::Init returned non-zero status");
     }
 
+    initialized.store(true, std::memory_order_release);
     return ResultVoid{};
   }
 };
 
 struct CommandInitForAnalysePage {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "initForAnalysePage");
     api.InitForAnalysePage();
     return ResultVoid{};
   }
@@ -328,7 +380,9 @@ struct CommandInitForAnalysePage {
 
 struct CommandAnalyseLayout {
   bool merge_similar_words = false;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "analyseLayout");
 
     tesseract::PageIterator *p_iter = api.AnalyseLayout(merge_similar_words);
 
@@ -361,7 +415,9 @@ struct CommandBeginProcessPages {
   int timeout_millisec{0}; // 0 = unlimited timeout
   bool textonly{false};
   Result invoke(tesseract::TessBaseAPI &api,
-                std::optional<ProcessPagesSession> &session) const {
+                std::optional<ProcessPagesSession> &session,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "beginProcessPages");
     if (session.has_value()) {
       throw_runtime(
           "beginProcessPages called while a session is already active");
@@ -403,7 +459,9 @@ struct CommandAddProcessPage {
   EncodedImageBuffer page;
   std::string filename;
   Result invoke(tesseract::TessBaseAPI &api,
-                std::optional<ProcessPagesSession> &session) const {
+                std::optional<ProcessPagesSession> &session,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "addProcessPage");
     if (!session.has_value()) {
       throw_runtime("addProcessPage: called without an active session");
     }
@@ -483,7 +541,9 @@ struct CommandAddProcessPage {
 
 struct CommandFinishProcessPages {
   Result invoke(tesseract::TessBaseAPI &,
-                std::optional<ProcessPagesSession> &session) const {
+                std::optional<ProcessPagesSession> &session,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "finishProcessPages");
     if (!session.has_value()) {
       throw_runtime("finishProcessPages: called without an active session");
     }
@@ -538,7 +598,9 @@ struct CommandGetProcessPagesStatus {
 
 struct CommandSetDebugVariable {
   std::string name, value;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setDebugVariable");
     if (name.empty()) {
       throw_runtime("setDebugVariable: variable name is empty");
     } else if (value.empty()) {
@@ -550,7 +612,9 @@ struct CommandSetDebugVariable {
 
 struct CommandSetVariable {
   std::string name, value;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setVariable");
     if (name.empty()) {
       throw_runtime("setVariable: variable name is empty");
     } else if (value.empty()) {
@@ -562,7 +626,9 @@ struct CommandSetVariable {
 
 struct CommandGetIntVariable {
   std::string name;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getIntVariable");
     int value;
     if (!api.GetIntVariable(name.c_str(), &value)) {
       throw_runtime("getIntVariable: variable '{}' was not found",
@@ -575,7 +641,9 @@ struct CommandGetIntVariable {
 
 struct CommandGetBoolVariable {
   std::string name;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getBoolVariable");
     bool value;
     if (!api.GetBoolVariable(name.c_str(), &value)) {
       throw_runtime("getBoolVariable: variable '{}' was not found",
@@ -587,7 +655,9 @@ struct CommandGetBoolVariable {
 
 struct CommandGetDoubleVariable {
   std::string name;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getDoubleVariable");
     double value;
     if (!api.GetDoubleVariable(name.c_str(), &value)) {
       throw_runtime("getDoubleVariable: variable '{}' was not found",
@@ -599,7 +669,9 @@ struct CommandGetDoubleVariable {
 
 struct CommandGetStringVariable {
   std::string name;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getStringVariable");
     auto value = api.GetStringVariable(name.c_str());
     if (value == nullptr) {
       throw_runtime("getStringVariable: variable '{}' was not found",
@@ -615,7 +687,9 @@ struct CommandSetImage {
   int height = 0;
   int bytes_per_pixel = 0; // bpp/8
   int bytes_per_line = 0;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setImage");
     api.SetImage(bytes.data(), width, height, bytes_per_pixel, bytes_per_line);
     return ResultVoid{};
   }
@@ -623,7 +697,9 @@ struct CommandSetImage {
 
 struct CommandSetPageMode {
   tesseract::PageSegMode psm;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setPageMode");
     if (psm < 0 || psm >= tesseract::PageSegMode::PSM_COUNT) {
 
       throw_runtime("setPageMode: page segmentation mode is out of range; "
@@ -637,7 +713,9 @@ struct CommandSetPageMode {
 
 struct CommandSetRectangle {
   int left, top, width, height;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setRectangle");
     api.SetRectangle(left, top, width, height);
     return ResultVoid{};
   }
@@ -645,7 +723,9 @@ struct CommandSetRectangle {
 
 struct CommandSetSourceResolution {
   int ppi;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "setSourceResolution");
     api.SetSourceResolution(ppi);
     return ResultVoid{};
   }
@@ -653,7 +733,9 @@ struct CommandSetSourceResolution {
 
 struct CommandRecognize {
   std::shared_ptr<MonitorContext> monitor_context;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "recognize");
     MonitorHandle handle{monitor_context};
     auto *monitor = monitor_context ? &handle.monitor : nullptr;
     if (api.Recognize(monitor) != 0) {
@@ -671,7 +753,9 @@ struct CommandRecognize {
 // };
 
 struct CommandDetectOrientationScript {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "detectOrientationScript");
     int orient_deg;
     float orient_conf;
     const char *script_name;
@@ -694,7 +778,9 @@ struct CommandDetectOrientationScript {
 };
 
 struct CommandMeanTextConf {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "meanTextConf");
     return ResultInt{api.MeanTextConf()};
   }
 };
@@ -702,7 +788,9 @@ struct CommandMeanTextConf {
 struct CommandGetPAGEText {
   int page_number;
   std::shared_ptr<MonitorContext> monitor_context;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getPAGEText");
     MonitorHandle handle{monitor_context};
     auto *monitor = monitor_context ? &handle.monitor : nullptr;
     char *page_text = api.GetPAGEText(monitor, page_number);
@@ -718,7 +806,9 @@ struct CommandGetPAGEText {
 
 struct CommandGetLSTMBoxText {
   int page_number;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getLSTMBoxText");
     char *lstm_box_text = api.GetLSTMBoxText(page_number);
     if (!lstm_box_text) {
       throw_runtime(
@@ -733,7 +823,9 @@ struct CommandGetLSTMBoxText {
 
 struct CommandGetBoxText {
   int page_number;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getBoxText");
     char *box_text = api.GetBoxText(page_number);
     if (!box_text) {
       throw_runtime("getBoxText: TessBaseAPI::GetBoxText returned null");
@@ -747,7 +839,9 @@ struct CommandGetBoxText {
 
 struct CommandGetWordStrBoxText {
   int page_number;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getWordStrBoxText");
     char *word_str_box_text = api.GetWordStrBoxText(page_number);
     if (!word_str_box_text) {
       throw_runtime(
@@ -762,7 +856,9 @@ struct CommandGetWordStrBoxText {
 
 struct CommandGetOSDText {
   int page_number;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getOSDText");
     char *ost_text = api.GetOsdText(page_number);
     if (!ost_text) {
       throw_runtime("getOSDText: TessBaseAPI::GetOsdText returned null");
@@ -775,7 +871,9 @@ struct CommandGetOSDText {
 };
 
 struct CommandAllWordConfidences {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "allWordConfidences");
     int *all_word_confidences = api.AllWordConfidences();
 
     std::vector<int> confidences;
@@ -790,7 +888,9 @@ struct CommandAllWordConfidences {
 };
 
 struct CommandGetUTF8Text {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getUTF8Text");
     char *utf8_text = api.GetUTF8Text();
     if (!utf8_text) {
       throw_runtime("getUTF8Text: TessBaseAPI::GetUTF8Text returned null");
@@ -805,7 +905,9 @@ struct CommandGetUTF8Text {
 struct CommandGetHOCRText {
   int page_number;
   std::shared_ptr<MonitorContext> monitor_context;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getHOCRText");
 
     MonitorHandle handle{monitor_context};
     auto *monitor = monitor_context ? &handle.monitor : nullptr;
@@ -823,7 +925,9 @@ struct CommandGetHOCRText {
 
 struct CommandGetTSVText {
   int page_number;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getTSVText");
     char *tsv_text = api.GetTSVText(page_number);
     if (!tsv_text) {
       throw_runtime("getTSVText: TessBaseAPI::GetTSVText returned null");
@@ -836,7 +940,9 @@ struct CommandGetTSVText {
 };
 
 struct CommandGetUNLVText {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getUNLVText");
     char *unlv_text = api.GetUNLVText();
     if (!unlv_text) {
       throw_runtime("getUNLVText: TessBaseAPI::GetUNLVText returned null");
@@ -850,7 +956,9 @@ struct CommandGetUNLVText {
 struct CommandGetALTOText {
   int page_number;
   std::shared_ptr<MonitorContext> monitor_context;
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getALTOText");
     MonitorHandle handle{monitor_context};
     auto *monitor = monitor_context ? &handle.monitor : nullptr;
     char *alto_text = api.GetAltoText(monitor, page_number);
@@ -865,7 +973,9 @@ struct CommandGetALTOText {
 };
 
 struct CommandGetInitLanguages {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getInitLanguages");
     const char *p_init_languages = api.GetInitLanguagesAsString();
 
     if (p_init_languages == nullptr) {
@@ -881,7 +991,9 @@ struct CommandGetInitLanguages {
 };
 
 struct CommandGetLoadedLanguages {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "getLoadedLanguages");
     std::vector<std::string> langs;
     api.GetLoadedLanguagesAsVector(&langs);
     return ResultArray{langs};
@@ -897,26 +1009,30 @@ struct CommandGetAvailableLanguages {
 };
 
 struct CommandClear {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                const std::atomic<bool> &initialized) const {
+    RequireInitialized(initialized, "clear");
     api.Clear();
     return ResultVoid{};
   }
 };
 
 struct CommandEnd {
-  Result invoke(tesseract::TessBaseAPI &api) const {
+  Result invoke(tesseract::TessBaseAPI &api,
+                std::atomic<bool> &initialized) const {
     api.End();
+    initialized.store(false, std::memory_order_release);
     return ResultVoid{};
   }
 };
 
 using Command = std::variant<
-    CommandVersion, CommandInit, CommandInitForAnalysePage, CommandSetVariable,
-    CommandSetDebugVariable, CommandGetIntVariable, CommandGetBoolVariable,
-    CommandGetDoubleVariable, CommandGetStringVariable, CommandSetInputName,
-    CommandGetInputName, CommandSetOutputName, CommandGetDataPath,
-    CommandSetInputImage, CommandGetInputImage, CommandSetPageMode,
-    CommandSetRectangle, CommandSetSourceResolution,
+    CommandVersion, CommandIsInitialized, CommandInit, CommandInitForAnalysePage,
+    CommandSetVariable, CommandSetDebugVariable, CommandGetIntVariable,
+    CommandGetBoolVariable, CommandGetDoubleVariable, CommandGetStringVariable,
+    CommandSetInputName, CommandGetInputName, CommandSetOutputName,
+    CommandGetDataPath, CommandSetInputImage, CommandGetInputImage,
+    CommandSetPageMode, CommandSetRectangle, CommandSetSourceResolution,
     CommandGetSourceYResolution, CommandSetImage, CommandGetThresholdedImage,
     CommandGetThresholdedImageScaleFactor, CommandRecognize,
     CommandAnalyseLayout, CommandDetectOrientationScript, CommandMeanTextConf,
