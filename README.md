@@ -281,12 +281,83 @@ new Tesseract();
 
 Creates a new Tesseract instance.
 
+#### Initialization Requirements
+
+Call `init(...)` once before using OCR/engine-dependent methods.
+
+Methods that do **not** require `init(...)`:
+
+- `version()`
+- `isInitialized()`
+- `setInputName(...)`
+- `getInputName()`
+- `abortProcessPages()`
+- `getProcessPagesStatus()`
+- `document.abort()`
+- `document.status()`
+- `init(...)`
+- `end()`
+
+Methods that **require** `init(...)`:
+
+- `setInputImage(...)`
+- `getInputImage()`
+- `getSourceYResolution()`
+- `getDataPath()`
+- `setOutputName(...)`
+- `clearPersistentCache()`
+- `clearAdaptiveClassifier()`
+- `setImage(...)`
+- `getThresholdedImage()`
+- `getThresholdedImageScaleFactor()`
+- `setPageMode(...)`
+- `setRectangle(...)`
+- `setSourceResolution(...)`
+- `recognize(...)`
+- `detectOrientationScript()`
+- `meanTextConf()`
+- `allWordConfidences()`
+- `getPAGEText(...)`
+- `getLSTMBoxText(...)`
+- `getBoxText(...)`
+- `getWordStrBoxText(...)`
+- `getOSDText(...)`
+- `getUTF8Text()`
+- `getHOCRText(...)`
+- `getTSVText(...)`
+- `getUNLVText()`
+- `getALTOText(...)`
+- `getInitLanguages()`
+- `getLoadedLanguages()`
+- `getAvailableLanguages()`
+- `setDebugVariable(...)`
+- `setVariable(...)`
+- `getIntVariable(...)`
+- `getBoolVariable(...)`
+- `getDoubleVariable(...)`
+- `getStringVariable(...)`
+- `clear()`
+- `beginProcessPages(...)`
+- `addProcessPage(...)`
+- `finishProcessPages()`
+- `document.begin(...)`
+- `document.addPage(...)`
+- `document.finish()`
+
 #### version
 
 Returns the currently loaded libtesseract version string.
 
 ```ts
 version(): Promise<string>
+```
+
+#### isInitialized
+
+Returns whether `init(...)` has already completed successfully and has not been reset via `end()`.
+
+```ts
+isInitialized(): Promise<boolean>
 ```
 
 #### init

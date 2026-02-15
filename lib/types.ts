@@ -990,26 +990,40 @@ export type TesseractWorkerError = Error & TesseractNativeError;
 export interface TesseractDocumentApi {
   /**
    * Starts a multipage processing session.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
+   * @throws {TesseractArgumentError} If options are missing/invalid.
+   * @throws {TesseractRuntimeError} If session already exists or renderer setup fails.
+   * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   begin(options: TesseractBeginProcessPagesOptions): Promise<void>;
 
   /**
    * Adds one encoded page to the active multipage session.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
+   * @throws {TesseractArgumentError} If `buffer` is not a non-empty Buffer.
+   * @throws {TesseractArgumentError} If `filename` is provided but is not a string.
+   * @throws {TesseractRuntimeError} If no session is active, decode fails, or page processing fails.
+   * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   addPage(buffer: Buffer<ArrayBuffer>, filename?: string): Promise<void>;
 
   /**
    * Finalizes the active multipage session and returns output PDF path.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
+   * @throws {TesseractRuntimeError} If no session is active or finalization fails.
+   * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   finish(): Promise<string>;
 
   /**
    * Aborts the active multipage session.
+   * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   abort(): Promise<void>;
 
   /**
    * Returns the current multipage session status.
+   * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   status(): Promise<TesseractProcessPagesStatus>;
 }
@@ -1053,6 +1067,7 @@ export interface TesseractInstance {
    * Sets the encoded source image buffer used by Tesseract.
    * @param {Buffer<ArrayBuffer>} buffer
    * @throws {TesseractArgumentError} If `buffer` is not a non-empty Buffer.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If leptonica cannot decode `buffer`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1060,6 +1075,7 @@ export interface TesseractInstance {
 
   /**
    * Returns the current input image bytes.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If no input image is available.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1067,12 +1083,14 @@ export interface TesseractInstance {
 
   /**
    * Returns source image Y resolution.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   getSourceYResolution(): Promise<number>;
 
   /**
    * Returns the tessdata path used by the engine.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If datapath is unavailable.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1082,6 +1100,7 @@ export interface TesseractInstance {
    * Sets output base name used by renderer-based outputs.
    * @param {string} outputName The output base name.
    * @throws {TesseractArgumentError} If `outputName` is not a string.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If `outputName` is empty.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1089,18 +1108,21 @@ export interface TesseractInstance {
 
   /**
    * Clears global library-level caches (for example language dictionaries).
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   clearPersistentCache(): Promise<void>;
 
   /**
    * Clears adaptive classifier state between pages/documents.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   clearAdaptiveClassifier(): Promise<void>;
 
   /**
    * Get a copy of the internal thresholded image from Tesseract.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If no thresholded image is available.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1109,6 +1131,7 @@ export interface TesseractInstance {
   /**
    * Returns the scale factor for thresholded/component images.
    * May return `0` if no thresholder is active.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   getThresholdedImageScaleFactor(): Promise<number>;
@@ -1125,6 +1148,7 @@ export interface TesseractInstance {
 
   /**
    * Initialize the engine for page analysis only.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   initForAnalysePage(): Promise<void>;
@@ -1133,6 +1157,7 @@ export interface TesseractInstance {
    * Run page layout analysis.
    * @param {boolean} mergeSimilarWords Whether to merge similar words during analysis.
    * @throws {TesseractArgumentError} If `mergeSimilarWords` is not a boolean.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If analysis fails or returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1142,6 +1167,7 @@ export interface TesseractInstance {
    * Starts a multipage processing session.
    * @deprecated use `document.begin()`
    * @throws {TesseractArgumentError} If options are missing/invalid.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If session already exists or renderer setup fails.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1152,6 +1178,7 @@ export interface TesseractInstance {
    * @deprecated use `document.addPage()`
    * @throws {TesseractArgumentError} If `buffer` is not a non-empty Buffer.
    * @throws {TesseractArgumentError} If `filename` is provided but is not a string.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If no session is active, decode fails, or page processing fails.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1160,6 +1187,7 @@ export interface TesseractInstance {
   /**
    * Finalizes the current multipage session and returns the output PDF path.
    * @deprecated use `document.finish()`
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If no session is active or finalization fails.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1186,6 +1214,7 @@ export interface TesseractInstance {
    * @param {DebugOnlyConfigurationVariables[DebugConfigurationVariableNames]} value Debug variable value.
    * @returns `false` if lookup/set failed.
    * @throws {TesseractArgumentError} If `name`/`value` are invalid types.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If `name`/`value` are empty.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1200,6 +1229,7 @@ export interface TesseractInstance {
    * @param {SetVariableConfigVariables[SetConfigurationVariableNames]} value Variable value.
    * @returns `false` if lookup/set failed.
    * @throws {TesseractArgumentError} If `name`/`value` are invalid types.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If `name`/`value` are empty.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1212,6 +1242,7 @@ export interface TesseractInstance {
    * Get a configuration variable as integer.
    * @param {SetNumberConfigurationVariableNames} name Numeric variable name.
    * @throws {TesseractArgumentError} If `name` has an invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If variable was not found.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1221,6 +1252,7 @@ export interface TesseractInstance {
    * Get a configuration variable as boolean (0/1).
    * @param {SetBoolConfigurationVariableNames} name Boolean variable name.
    * @throws {TesseractArgumentError} If `name` has an invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If variable was not found.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1230,6 +1262,7 @@ export interface TesseractInstance {
    * Get a configuration variable as double.
    * @param {SetNumberConfigurationVariableNames} name Numeric variable name.
    * @throws {TesseractArgumentError} If `name` has an invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If variable was not found.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1239,6 +1272,7 @@ export interface TesseractInstance {
    * Get a configuration variable as string.
    * @param {SetStringConfigurationVariableNames} name String variable name.
    * @throws {TesseractArgumentError} If `name` has an invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If variable was not found.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1248,6 +1282,7 @@ export interface TesseractInstance {
    * Set the image to be recognized.
    * @param {Buffer<ArrayBuffer>} buffer Image data buffer.
    * @throws {TesseractArgumentError} If `buffer` is not a non-empty Buffer.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If decoding fails or decoded data is invalid.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1257,6 +1292,7 @@ export interface TesseractInstance {
    * Set the page segmentation mode (PSM).
    * @param {PageSegmentationMode} psm Page segmentation mode.
    * @throws {TesseractArgumentError} If `psm` is not a number.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRangeError} If `psm` is outside valid mode range.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1266,6 +1302,7 @@ export interface TesseractInstance {
    * Restrict recognition to a rectangle.
    * @param {TesseractSetRectangleOptions} options Rectangle options.
    * @throws {TesseractArgumentError} If rectangle options are missing/invalid.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   setRectangle(options: TesseractSetRectangleOptions): Promise<void>;
@@ -1274,6 +1311,7 @@ export interface TesseractInstance {
    * Set the source resolution in PPI.
    * @param {number} ppi Source resolution in PPI.
    * @throws {TesseractArgumentError} If `ppi` is missing or not a number.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   setSourceResolution(ppi: number): Promise<void>;
@@ -1282,6 +1320,7 @@ export interface TesseractInstance {
    * Runs OCR recognition.
    * @param {(info: ProgressChangedInfo) => void} progressCallback Optional progress callback.
    * @throws {TesseractArgumentError} If `progressCallback` is provided but not a function.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If native recognition fails.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1291,6 +1330,7 @@ export interface TesseractInstance {
 
   /**
    * Detect orientation and script (OSD).
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If OSD detection fails.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1298,12 +1338,14 @@ export interface TesseractInstance {
 
   /**
    * Returns mean text confidence.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   meanTextConf(): Promise<number>;
 
   /**
    * Returns all word confidences.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   allWordConfidences(): Promise<number[]>;
@@ -1313,6 +1355,7 @@ export interface TesseractInstance {
    * @param {(info: ProgressChangedInfo) => void} progressCallback callback to monitor the progress
    * @param {number} pageNumber pageNumber is a 0-based page index
    * @throws {TesseractArgumentError} If callback/page number types are invalid.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If PAGE generation fails or returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1326,6 +1369,7 @@ export interface TesseractInstance {
    * Constructs coordinates in the original image - not just the rectangle.
    * @param {number} pageNumber pageNumber is a 0-based page index that will appear in the box file.
    * @throws {TesseractArgumentError} If `pageNumber` has invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If LSTM box text generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1336,6 +1380,7 @@ export interface TesseractInstance {
    * Constructs coordinates in the original image - not just the rectangle.
    * @param {number} pageNumber page_number is a 0-based page index that will appear in the box file.
    * @throws {TesseractArgumentError} If `pageNumber` has invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If box text generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1345,6 +1390,7 @@ export interface TesseractInstance {
    * The recognized text is returned as a string which is coded in the same format as a WordStr box file used in training.
    * @param {number} pageNumber pageNumber is a 0-based page index that will appear in the box file.
    * @throws {TesseractArgumentError} If `pageNumber` has invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If WordStr box generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1354,6 +1400,7 @@ export interface TesseractInstance {
    * The recognized text is returned as a string which is coded as UTF8
    * @param {number} pageNumber pageNumber is a 0-based page index that will appear in the osd file.
    * @throws {TesseractArgumentError} If `pageNumber` has invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If OSD text generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1361,6 +1408,7 @@ export interface TesseractInstance {
 
   /**
    * Get recognized text as UTF-8.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If UTF-8 extraction returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1371,6 +1419,7 @@ export interface TesseractInstance {
    * @param {Function} progressCallback Optional progress callback.
    * @param {number} pageNumber Optional page number (0-based).
    * @throws {TesseractArgumentError} If callback/page number types are invalid.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If hOCR generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1383,6 +1432,7 @@ export interface TesseractInstance {
    * Get TSV output.
    * @param {number} pageNumber Optional page number (0-based).
    * @throws {TesseractArgumentError} If `pageNumber` has invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If TSV generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1390,6 +1440,7 @@ export interface TesseractInstance {
 
   /**
    * Get UNLV output.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If UNLV generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1399,6 +1450,7 @@ export interface TesseractInstance {
    * Get ALTO XML output.
    * @param {number} pageNumber Optional page number (0-based).
    * @throws {TesseractArgumentError} If `pageNumber` has invalid type.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If ALTO generation returns null.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1406,6 +1458,7 @@ export interface TesseractInstance {
 
   /**
    * Get languages used at initialization.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractRuntimeError} If initialization languages are unavailable.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
@@ -1413,6 +1466,7 @@ export interface TesseractInstance {
 
   /**
    * Get languages currently loaded.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   getLoadedLanguages(): Promise<Language[]>;
@@ -1420,12 +1474,14 @@ export interface TesseractInstance {
   /**
    * Get available languages from tessdata.
    * NOTE: this only will return anything after `init` was called before with a valid selection of languages
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   getAvailableLanguages(): Promise<Language[]>;
 
   /**
    * Clear internal recognition results/state.
+   * @throws {TesseractRuntimeError} If called before `init(...)`.
    * @throws {TesseractWorkerError} If the worker is closing/stopped.
    */
   clear(): Promise<void>;
