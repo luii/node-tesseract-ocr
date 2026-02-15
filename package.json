@@ -1,6 +1,6 @@
 {
   "name": "@luii/node-tesseract-ocr",
-  "version": "2.1.0",
+  "version": "2.3.2",
   "private": false,
   "binary": {
     "napi_versions": [
