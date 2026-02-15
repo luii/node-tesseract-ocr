@@ -17,7 +17,6 @@ Native C++ addon for Node.js that exposes Tesseract OCR (`libtesseract-dev`) to 
   - [Types](#types)
   - [Tesseract API](#tesseract-api)
 - [License](#license)
-- [Special Thanks](#special-thanks)
 
 ## Features
 
