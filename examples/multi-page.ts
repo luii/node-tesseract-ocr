@@ -18,6 +18,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Language, OcrEngineModes, Tesseract } from "@luii/node-tesseract-ocr";
 
+const drawProgressBar = (progress: number) => {
+  const barWidth = 30;
+  const filledWidth = Math.floor((progress / 100) * barWidth);
+  const emptyWidth = barWidth - filledWidth;
+  const progressBar = "█".repeat(filledWidth) + "▒".repeat(emptyWidth);
+  return `[${progressBar}] ${progress.toFixed(2)}%`;
+};
+
 function toAbsoluteImagePath(inputPath: string): string {
   return path.isAbsolute(inputPath)
     ? inputPath
@@ -58,7 +66,24 @@ async function main() {
 
     for (const absolutePath of absoluteImagePaths) {
       const imageBuffer = readFileSync(absolutePath);
-      await tesseract.document.addPage(imageBuffer);
+      await tesseract.document.addPage({
+        buffer: imageBuffer,
+        filename: absolutePath,
+        progressCallback: (info) => {
+          process.stdout.clearLine?.(0);
+          process.stdout.cursorTo?.(0);
+          process.stdout.write(
+            `${path.basename(absolutePath)}: ${drawProgressBar(info.percent)}`,
+          );
+        },
+      });
+
+      process.stdout.clearLine?.(0);
+      process.stdout.cursorTo?.(0);
+      process.stdout.write(
+        `${path.basename(absolutePath)}: ${drawProgressBar(100)}`,
+      );
+      process.stdout.write("\n");
 
       const status = await tesseract.document.status();
       console.log(
