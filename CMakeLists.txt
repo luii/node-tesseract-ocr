@@ -17,10 +17,10 @@ add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} ${CMAKE_JS_SRC})
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "" SUFFIX ".node")
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(TESS REQUIRED IMPORTED_TARGET "tesseract>=5")
+pkg_check_modules(TESS REQUIRED IMPORTED_TARGET "tesseract>=5.5.2")
 pkg_check_modules(LEPT REQUIRED IMPORTED_TARGET "lept>=1.74")
 
-target_include_directories(${PROJECT_NAME} PRIVATE 
+target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_JS_INC}
   ${TESS_INCLUDE_DIRS}
   ${LEPT_INCLUDE_DIRS}
@@ -32,7 +32,7 @@ if(APPLE)
   endforeach()
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE 
+target_link_libraries(${PROJECT_NAME} PRIVATE
   ${CMAKE_JS_LIB}
   PkgConfig::TESS
   PkgConfig::LEPT
