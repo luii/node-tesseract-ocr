@@ -28,8 +28,25 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential pkg-config \
-            libtesseract-dev=5.5.2 libleptonica-dev
+            build-essential pkg-config cmake git \
+            libleptonica-dev \
+            libpng-dev libjpeg-dev libtiff-dev zlib1g-dev \
+            libwebp-dev libopenjp2-7-dev
+      - name: Build and install Tesseract 5.5.2 from source (Linux only)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 5.5.2 https://github.com/tesseract-ocr/tesseract.git /tmp/tesseract-src
+          cmake -S /tmp/tesseract-src -B /tmp/tesseract-src/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DBUILD_TRAINING_TOOLS=OFF \
+            -DBUILD_TESTS=OFF
+          cmake --build /tmp/tesseract-src/build -j"$(nproc)"
+          sudo cmake --install /tmp/tesseract-src/build
+          sudo ldconfig
       - name: Install system deps (macOS only)
         if: runner.os == 'macOS'
         run: |
