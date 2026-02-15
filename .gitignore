@@ -2,6 +2,7 @@ build/
 dist/
 node_modules/
 prebuilds/
+traineddata-local/
 .clangd
 compile_commands.json
 .cache/
